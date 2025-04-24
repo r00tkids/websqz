@@ -133,7 +133,7 @@ impl Predictor {
     fn update(&mut self, bit: u8) {
         // Update count
         self.count[self.ctx][bit as usize] += 1;
-        if self.count[self.ctx][bit as usize] > 0xffff {
+        if self.count[self.ctx][bit as usize] > 0xfffe {
             // Rescale count
             self.count[self.ctx][0] >>= 1;
             self.count[self.ctx][1] >>= 1;
