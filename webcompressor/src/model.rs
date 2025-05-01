@@ -1,4 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
+use crate::utils::U24_MAX;
+use anyhow::Result;
+use std::{cell::RefCell, io::Read, rc::Rc};
 
 #[derive(Clone, Copy)]
 struct NOrderBytePredData {
@@ -9,7 +11,7 @@ impl Default for NOrderBytePredData {
     fn default() -> Self {
         Self {
             // Start with half probability
-            data: 0xFFFFFF / 2,
+            data: U24_MAX / 2,
         }
     }
 }
@@ -20,15 +22,15 @@ impl NOrderBytePredData {
     }
 
     fn prob(&self) -> i32 {
-        (self.data & 0xFFFFFF) as i32
+        (self.data & U24_MAX) as i32
     }
 
     fn set_count(&mut self, new_count: u32) {
-        self.data = ((new_count << 24) & 0xFF000000) | self.data & 0xFFFFFF;
+        self.data = ((new_count << 24) & 0xFF000000) | self.data & U24_MAX;
     }
 
     fn set_prob(&mut self, new_prob: i32) {
-        self.data = (new_prob as u32 & 0xFFFFFF) | (self.data & 0xFF000000);
+        self.data = (new_prob as u32 & U24_MAX) | (self.data & 0xFF000000);
     }
 }
 
@@ -89,6 +91,7 @@ impl NOrderBytePred {
         for i in 0..8 {
             bit_mask |= ((byte_mask >> i) & 1) as u64 * (0xff << (i * 8));
         }
+
         Self {
             ctx: 0,
             bit_ctx: 0,
@@ -115,7 +118,9 @@ impl NOrderBytePred {
             }
 
             // Learning function
-            prob += (0xffffff * bit as i32 - prob as i32) / (count + 1) as i32;
+            prob += (U24_MAX as f64
+                * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / (count as f64 + 0.3)))
+                as i32;
             inst.set_count(count);
             inst.set_prob(prob);
         }
@@ -133,33 +138,37 @@ impl NOrderBytePred {
                 .wrapping_mul(self.magic_num.wrapping_mul(3)),
             );
 
-            //self.ctx = ((self.ctx << 8) | self.bit_ctx as usize) % self.model.len();
-
             // Reset bit_ctx
             self.bit_ctx = 1;
         }
     }
 }
 
-struct ModelWithWeight {
-    model: NOrderBytePred,
-    weight: f64,
+#[derive(Debug)]
+pub struct ModelDef {
+    pub byte_mask: u8,
+    pub weight: f64,
+}
+
+pub struct ModelWithWeight {
+    pub model: NOrderBytePred,
+    pub weight: f64,
 }
 
 pub struct LnMixerPred {
-    models_with_weight: Vec<ModelWithWeight>,
+    pub models_with_weight: Vec<ModelWithWeight>,
     last_stretched_p: Vec<f64>,
 }
 
 impl LnMixerPred {
-    pub fn new() -> Self {
+    pub fn new(model_defs: &Vec<ModelDef>) -> Self {
         let hash_table = Rc::new(RefCell::new(HashTable::new(19)));
 
         let mut models_with_weight = Vec::new();
-        for i in 0..16 {
+        for model_def in model_defs {
             models_with_weight.push(ModelWithWeight {
-                model: NOrderBytePred::new(i, hash_table.clone(), 50),
-                weight: 0.,
+                model: NOrderBytePred::new(model_def.byte_mask, hash_table.clone(), 255),
+                weight: model_def.weight,
             });
         }
 
@@ -174,7 +183,7 @@ impl LnMixerPred {
 
         let mut i = 0;
         for model in &self.models_with_weight {
-            let p = model.model.prob() as f64 / 0xffffff as f64;
+            let p = model.model.prob() as f64 / U24_MAX as f64;
             let p_stretched = (p / (1. - p)).ln();
             self.last_stretched_p[i] = p_stretched;
 
@@ -183,6 +192,7 @@ impl LnMixerPred {
             i += 1;
         }
 
+        assert!(!sum.is_nan());
         // Squash it
         1. / (1. + f64::exp(-sum))
     }

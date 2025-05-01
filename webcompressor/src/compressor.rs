@@ -12,10 +12,10 @@ struct Encoder<W: Write> {
 }
 
 impl<W: Write> Encoder<W> {
-    pub fn new(output: W) -> Result<Self> {
+    pub fn new(model: LnMixerPred, output: W) -> Result<Self> {
         Ok(Self {
             coder: ArithmeticEncoder::new(output)?,
-            model: LnMixerPred::new(),
+            model: model,
         })
     }
 
@@ -41,10 +41,10 @@ struct Decoder<R: Read> {
 }
 
 impl<R: Read> Decoder<R> {
-    pub fn new(read_stream: R) -> Result<Self> {
+    pub fn new(model: LnMixerPred, read_stream: R) -> Result<Self> {
         Ok(Self {
             coder: ArithmeticDecoder::new(read_stream)?,
-            model: LnMixerPred::new(),
+            model: model,
         })
     }
 
@@ -70,19 +70,28 @@ mod tests {
 
     use crate::coder::{ArithmeticDecoder, ArithmeticEncoder};
     use crate::compressor::{Decoder, Encoder};
+    use crate::model::LnMixerPred;
+    use crate::model_finder::ModelFinder;
 
     #[test]
     pub fn round_trip() {
         let mut test_data = String::new();
+        // "tests/ray_tracer/index.js"
         File::open("tests/ray_tracer/index.js")
             .unwrap()
             .read_to_string(&mut test_data)
             .unwrap();
 
         let test_bytes = test_data.as_bytes();
+
+        let mut model_finder = ModelFinder::new();
+        model_finder.learn_from(test_bytes).unwrap();
+        let model_defs = &model_finder.model_defs;
+        println!("{:?}", model_defs);
         let encoded_data = {
+            let model = LnMixerPred::new(model_defs);
             let encoded_data: Vec<u8> = Vec::new();
-            let encoder = Encoder::new(encoded_data).unwrap();
+            let encoder = Encoder::new(model, encoded_data).unwrap();
             encoder.encode_bytes(test_bytes).unwrap()
         };
 
@@ -92,7 +101,8 @@ mod tests {
             encoded_data.len()
         );
 
-        let mut decoder = Decoder::new(encoded_data.as_slice()).unwrap();
+        let model = LnMixerPred::new(model_defs);
+        let mut decoder = Decoder::new(model, encoded_data.as_slice()).unwrap();
 
         let decode_res = decoder.decode(test_bytes.len()).unwrap();
         assert!(String::from_utf8(decode_res).unwrap() == test_data);

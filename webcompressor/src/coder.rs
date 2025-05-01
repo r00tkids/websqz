@@ -1,3 +1,4 @@
+use crate::utils::U24_MAX;
 use anyhow::{anyhow, Result};
 use std::{
     io::{BufReader, BufWriter, Read, Write},
@@ -22,7 +23,7 @@ impl<W: Write> ArithmeticEncoder<W> {
 
     pub fn encode(&mut self, bit: u8, p: u32) -> Result<()> {
         // p is P(1) and has 24 bit precision
-        assert!(p <= 0xffffff);
+        assert!(p <= U24_MAX);
         assert!(bit == 0 || bit == 1);
         assert!(self.high > self.low);
 
@@ -89,7 +90,7 @@ impl<R: Read> ArithmeticDecoder<R> {
     }
 
     pub fn decode(&mut self, p: u32) -> Result<u8> {
-        assert!(p <= 0xffffff);
+        assert!(p <= U24_MAX);
         assert!(self.high > self.low);
 
         let mid = self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;
