@@ -2,20 +2,20 @@ use std::io::{Read, Write};
 
 use crate::{
     coder::{ArithmeticDecoder, ArithmeticEncoder},
-    model::MixerPred,
+    model::LnMixerPred,
 };
 use anyhow::Result;
 
 struct Encoder<W: Write> {
     coder: ArithmeticEncoder<W>,
-    model: MixerPred,
+    model: LnMixerPred,
 }
 
 impl<W: Write> Encoder<W> {
     pub fn new(output: W) -> Result<Self> {
         Ok(Self {
             coder: ArithmeticEncoder::new(output)?,
-            model: MixerPred::new(),
+            model: LnMixerPred::new(),
         })
     }
 
@@ -25,9 +25,10 @@ impl<W: Write> Encoder<W> {
         for b in bytes {
             for i in 0..8 {
                 let prob = self.model.prob();
+                let int_24_prob = (prob * 0xffffff as f64) as u32;
                 let bit = (b >> (7 - i)) & 1;
-                self.coder.encode(bit, prob)?;
-                self.model.update(bit);
+                self.coder.encode(bit, int_24_prob)?;
+                self.model.update(bit as f64 - prob, bit);
             }
         }
         Ok(self.coder.finish()?)
@@ -36,14 +37,14 @@ impl<W: Write> Encoder<W> {
 
 struct Decoder<R: Read> {
     coder: ArithmeticDecoder<R>,
-    model: MixerPred,
+    model: LnMixerPred,
 }
 
 impl<R: Read> Decoder<R> {
     pub fn new(read_stream: R) -> Result<Self> {
         Ok(Self {
             coder: ArithmeticDecoder::new(read_stream)?,
-            model: MixerPred::new(),
+            model: LnMixerPred::new(),
         })
     }
 
@@ -52,8 +53,9 @@ impl<R: Read> Decoder<R> {
         for byte_idx in 0..size {
             for i in 0..8 {
                 let prob = self.model.prob();
-                let bit = self.coder.decode(prob)?;
-                self.model.update(bit);
+                let int_24_prob = (prob * 0xffffff as f64) as u32;
+                let bit = self.coder.decode(int_24_prob)?;
+                self.model.update(bit as f64 - prob, bit);
                 res[byte_idx] |= bit << (7 - i);
             }
         }
@@ -72,7 +74,7 @@ mod tests {
     #[test]
     pub fn round_trip() {
         let mut test_data = String::new();
-        File::open("test_data.txt")
+        File::open("tests/ray_tracer/index.js")
             .unwrap()
             .read_to_string(&mut test_data)
             .unwrap();
