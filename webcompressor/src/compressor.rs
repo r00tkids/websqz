@@ -1,0 +1,98 @@
+use std::io::{Read, Write};
+
+use crate::{
+    coder::{ArithmeticDecoder, ArithmeticEncoder},
+    model::MixerPred,
+};
+use anyhow::Result;
+
+struct Encoder<W: Write> {
+    coder: ArithmeticEncoder<W>,
+    model: MixerPred,
+}
+
+impl<W: Write> Encoder<W> {
+    pub fn new(output: W) -> Result<Self> {
+        Ok(Self {
+            coder: ArithmeticEncoder::new(output)?,
+            model: MixerPred::new(),
+        })
+    }
+
+    pub fn encode_bytes(mut self, mut byte_stream: impl Read) -> Result<W> {
+        let mut bytes = Vec::<u8>::new();
+        byte_stream.read_to_end(&mut bytes)?;
+        for b in bytes {
+            for i in 0..8 {
+                let prob = self.model.prob();
+                let bit = (b >> (7 - i)) & 1;
+                self.coder.encode(bit, prob)?;
+                self.model.update(bit);
+            }
+        }
+        Ok(self.coder.finish()?)
+    }
+}
+
+struct Decoder<R: Read> {
+    coder: ArithmeticDecoder<R>,
+    model: MixerPred,
+}
+
+impl<R: Read> Decoder<R> {
+    pub fn new(read_stream: R) -> Result<Self> {
+        Ok(Self {
+            coder: ArithmeticDecoder::new(read_stream)?,
+            model: MixerPred::new(),
+        })
+    }
+
+    pub fn decode(&mut self, size: usize) -> Result<Vec<u8>> {
+        let mut res: Vec<u8> = vec![0; size];
+        for byte_idx in 0..size {
+            for i in 0..8 {
+                let prob = self.model.prob();
+                let bit = self.coder.decode(prob)?;
+                self.model.update(bit);
+                res[byte_idx] |= bit << (7 - i);
+            }
+        }
+
+        Ok(res)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::Read};
+
+    use crate::coder::{ArithmeticDecoder, ArithmeticEncoder};
+    use crate::compressor::{Decoder, Encoder};
+
+    #[test]
+    pub fn round_trip() {
+        let mut test_data = String::new();
+        File::open("test_data.txt")
+            .unwrap()
+            .read_to_string(&mut test_data)
+            .unwrap();
+
+        let test_bytes = test_data.as_bytes();
+        let encoded_data = {
+            let encoded_data: Vec<u8> = Vec::new();
+            let encoder = Encoder::new(encoded_data).unwrap();
+            encoder.encode_bytes(test_bytes).unwrap()
+        };
+
+        println!(
+            "Size of input: {}\nSize of encoded data: {}",
+            test_data.len(),
+            encoded_data.len()
+        );
+
+        let mut decoder = Decoder::new(encoded_data.as_slice()).unwrap();
+
+        let decode_res = decoder.decode(test_bytes.len()).unwrap();
+        assert!(String::from_utf8(decode_res).unwrap() == test_data);
+    }
+}

@@ -1,11 +1,10 @@
-use anyhow::{anyhow, bail, Result};
-use bytes::Buf;
+use anyhow::{anyhow, Result};
 use std::{
     io::{BufReader, BufWriter, Read, Write},
     u32,
 };
 
-struct ArithmeticEncoder<W: Write> {
+pub struct ArithmeticEncoder<W: Write> {
     low: u32,
     high: u32,
 
@@ -22,22 +21,28 @@ impl<W: Write> ArithmeticEncoder<W> {
     }
 
     pub fn encode(&mut self, bit: u8, p: u32) -> Result<()> {
-        assert!(p <= 0xffff);
+        // p is P(1) and has 24 bit precision
+        assert!(p <= 0xffffff);
         assert!(bit == 0 || bit == 1);
         assert!(self.high > self.low);
-        let mid = self.low + (((self.high - self.low) as u64 * p as u64) >> 16) as u32;
 
+        // mid = low + ((high - low) * p) / (p_max + 1)
+        let mid = self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;
+
+        // Below or equal to mid is the interval for bit = 1, and above mid is the inverval for bit = 0
         assert!(self.high > mid && mid >= self.low);
         if bit == 1 {
+            // Set the subinterval to low -> mid
             self.high = mid;
         } else {
+            // Set the subinterval to (mid + 1) -> high
             self.low = mid + 1;
         }
 
         // Renormalize and tell the decoder about it
-        // This happens when the MSB of low and high is equal
-        // since at that point there isn't enough precision left in the range.
-        while (self.high ^ self.low) < 0x1000000 {
+        // as long as the MSB of low and high is equal
+        // since at that point there isn't enough precision left in the MSB range to distinguish between 0 and 1 bit
+        while (self.high ^ self.low) < (1 << 24) {
             self.output.write(&[(self.high >> 24) as u8])?;
             self.low <<= 8;
             self.high = self.high << 8 | 255;
@@ -55,7 +60,7 @@ impl<W: Write> ArithmeticEncoder<W> {
     }
 }
 
-struct ArithmeticDecoder<R: Read> {
+pub struct ArithmeticDecoder<R: Read> {
     low: u32,
     high: u32,
     state: u32,
@@ -68,7 +73,7 @@ impl<R: Read> ArithmeticDecoder<R> {
 
         let mut state: u32 = 0;
         let mut buf = [0u8; 1];
-        for i in 0..4 {
+        for _ in 0..4 {
             if input.read(&mut buf)? == 0 {
                 buf[0] = 0;
             }
@@ -84,10 +89,10 @@ impl<R: Read> ArithmeticDecoder<R> {
     }
 
     pub fn decode(&mut self, p: u32) -> Result<u8> {
-        assert!(p <= 0xffff);
+        assert!(p <= 0xffffff);
         assert!(self.high > self.low);
 
-        let mid = self.low + (((self.high - self.low) as u64 * p as u64) >> 16) as u32;
+        let mid = self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;
 
         assert!(self.high > mid && mid >= self.low);
         let mut bit = 0;
@@ -112,92 +117,67 @@ impl<R: Read> ArithmeticDecoder<R> {
     }
 }
 
-struct Predictor {
-    ctx: usize,
-    count: [[u32; 2]; 512],
-}
-
-impl Predictor {
-    pub fn new() -> Self {
-        Self {
-            ctx: 0,
-            count: [[0; 2]; 512],
-        }
-    }
-
-    fn prob(&self) -> u32 {
-        (0x10000 * (self.count[self.ctx][1] + 1))
-            / (self.count[self.ctx][1] + self.count[self.ctx][0] + 2)
-    }
-
-    fn update(&mut self, bit: u8) {
-        // Update count
-        self.count[self.ctx][bit as usize] += 1;
-        if self.count[self.ctx][bit as usize] > 0xfffe {
-            // Rescale count
-            self.count[self.ctx][0] >>= 1;
-            self.count[self.ctx][1] >>= 1;
-        }
-
-        self.ctx = (self.ctx << 1) | bit as usize;
-        if self.ctx >= 512 {
-            // We overflowed
-            self.ctx = bit as usize;
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::Read};
-
-    use crate::coder::Predictor;
 
     use super::{ArithmeticDecoder, ArithmeticEncoder};
 
     #[test]
     pub fn round_trip() {
-        let mut hello = String::new();
-        File::open("test_data.txt")
-            .unwrap()
-            .read_to_string(&mut hello)
-            .unwrap();
+        let hello = "hello world";
         let hello_bytes = hello.as_bytes();
         let encoded_data = {
-            let mut predictor = Predictor::new();
             let encoded_data: Vec<u8> = Vec::new();
             let mut encoder = ArithmeticEncoder::new(encoded_data).unwrap();
 
             for b in hello_bytes {
                 for i in 0..8 {
-                    let prob = predictor.prob();
                     let bit = (b >> i) & 1;
-                    encoder.encode(bit, prob).unwrap();
-                    predictor.update(bit);
+                    encoder.encode(bit, 0x7FFFFF).unwrap();
                 }
             }
             encoder.finish().unwrap()
         };
 
-        println!(
-            "Size of input: {}\nSize of encoded data: {}",
-            hello.len(),
-            encoded_data.len()
-        );
-
         let mut decoder = ArithmeticDecoder::new(encoded_data.as_slice()).unwrap();
 
-        let mut predictor = Predictor::new();
         let mut decode_buf = vec![0; hello_bytes.len()];
         for i in 0..(hello_bytes.len()) {
             for bit in 0..8 {
-                let prob = predictor.prob();
-                let r = decoder.decode(prob).unwrap();
+                let r = decoder.decode(0x7FFFFF).unwrap();
                 decode_buf[i] |= r << bit;
-                predictor.update(r);
             }
         }
 
         assert!(String::from_utf8(decode_buf.to_vec()).unwrap() == hello);
+    }
+
+    #[test]
+    pub fn prob_1_bit_0() {
+        let bytes = [0, 0, 0, 0];
+        let encoded_data = {
+            let encoded_data: Vec<u8> = Vec::new();
+            let mut encoder = ArithmeticEncoder::new(encoded_data).unwrap();
+
+            for b in bytes {
+                for i in 0..8 {
+                    let bit = (b >> i) & 1;
+                    encoder.encode(bit, 0xffffff).unwrap();
+                }
+            }
+            encoder.finish().unwrap()
+        };
+
+        let mut decoder = ArithmeticDecoder::new(encoded_data.as_slice()).unwrap();
+
+        let mut decode_buf = vec![0; bytes.len()];
+        for i in 0..(bytes.len()) {
+            for bit in 0..8 {
+                let r = decoder.decode(0xffffff).unwrap();
+                decode_buf[i] |= r << bit;
+            }
+        }
+
+        assert!(decode_buf.to_vec() == bytes);
     }
 }
