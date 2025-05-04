@@ -1,6 +1,5 @@
 use crate::utils::U24_MAX;
-use anyhow::Result;
-use std::{cell::RefCell, io::Read, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone, Copy)]
 struct NOrderBytePredData {
@@ -129,6 +128,7 @@ impl NOrderBytePred {
         if self.bit_ctx >= 256 {
             // Remove the extra leading bit before using it in the ctx
             self.bit_ctx &= 0xff;
+
             self.prev_bytes = ((self.prev_bytes << 8) | self.bit_ctx as u64) & self.mask;
 
             self.ctx = self.hash_table.borrow().hash(
@@ -144,7 +144,7 @@ impl NOrderBytePred {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModelDef {
     pub byte_mask: u8,
     pub weight: f64,

@@ -31,7 +31,21 @@ impl<W: Write> Encoder<W> {
                 self.model.update(bit as f64 - prob, bit);
             }
         }
-        Ok(self.coder.finish()?)
+        Ok((self.coder.finish()?))
+    }
+
+    pub fn warm_up(&mut self, mut byte_stream: impl Read) -> Result<()> {
+        let mut bytes = Vec::<u8>::new();
+        byte_stream.read_to_end(&mut bytes)?;
+        for b in bytes {
+            for i in 0..8 {
+                let prob = self.model.prob();
+                let bit = (b >> (7 - i)) & 1;
+                self.model.update(bit as f64 - prob, bit);
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -62,6 +76,20 @@ impl<R: Read> Decoder<R> {
 
         Ok(res)
     }
+
+    pub fn warm_up(&mut self, mut byte_stream: impl Read) -> Result<()> {
+        let mut bytes = Vec::<u8>::new();
+        byte_stream.read_to_end(&mut bytes)?;
+        for b in bytes {
+            for i in 0..8 {
+                let prob = self.model.prob();
+                let bit = (b >> (7 - i)) & 1;
+                self.model.update(bit as f64 - prob, bit);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -75,6 +103,8 @@ mod tests {
 
     #[test]
     pub fn round_trip() {
+        let bootstrap_text = "for(w=c.width=185,a=c.getContext('2d'),a.drawImage(this,p=0,0),e='',d=a.getImageData(0,0,w,150).data;t=d[p+=4];)e+=String.fromCharCode(t);(1,eval)(e)";
+
         let mut test_data = String::new();
         // "tests/ray_tracer/index.js"
         File::open("tests/ray_tracer/index.js")
@@ -91,7 +121,8 @@ mod tests {
         let encoded_data = {
             let model = LnMixerPred::new(model_defs);
             let encoded_data: Vec<u8> = Vec::new();
-            let encoder = Encoder::new(model, encoded_data).unwrap();
+            let mut encoder = Encoder::new(model, encoded_data).unwrap();
+            encoder.warm_up(bootstrap_text.as_bytes()).unwrap();
             encoder.encode_bytes(test_bytes).unwrap()
         };
 
@@ -103,6 +134,8 @@ mod tests {
 
         let model = LnMixerPred::new(model_defs);
         let mut decoder = Decoder::new(model, encoded_data.as_slice()).unwrap();
+
+        decoder.warm_up(bootstrap_text.as_bytes()).unwrap();
 
         let decode_res = decoder.decode(test_bytes.len()).unwrap();
         assert!(String::from_utf8(decode_res).unwrap() == test_data);
