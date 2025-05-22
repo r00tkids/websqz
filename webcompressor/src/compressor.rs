@@ -1,5 +1,9 @@
-use std::io::{Read, Write};
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+};
 
+use crate::utils::U24_MAX;
 use crate::{
     coder::{ArithmeticDecoder, ArithmeticEncoder},
     model::LnMixerPred,
@@ -19,17 +23,28 @@ impl<W: Write> Encoder<W> {
         })
     }
 
+    // 9-bit symbols
+    // if MSB = 0
+    //  encode as a normal byte
+    // if MSB = 1
+    //  encode dict. pos = { idx: 12 bit, len: 4 bit }
+
     pub fn encode_bytes(mut self, mut byte_stream: impl Read) -> Result<W> {
         let mut bytes = Vec::<u8>::new();
         byte_stream.read_to_end(&mut bytes)?;
-        for b in bytes {
+
+        let mut b_idx = 0;
+        while b_idx < bytes.len() {
+            let b = bytes[b_idx];
             for i in 0..8 {
                 let prob = self.model.prob();
-                let int_24_prob = (prob * 0xffffff as f64) as u32;
+                let int_24_prob = (prob * U24_MAX as f64) as u32;
                 let bit = (b >> (7 - i)) & 1;
                 self.coder.encode(bit, int_24_prob)?;
                 self.model.update(bit as f64 - prob, bit);
             }
+
+            b_idx += 1;
         }
         Ok((self.coder.finish()?))
     }
@@ -67,7 +82,7 @@ impl<R: Read> Decoder<R> {
         for byte_idx in 0..size {
             for i in 0..8 {
                 let prob = self.model.prob();
-                let int_24_prob = (prob * 0xffffff as f64) as u32;
+                let int_24_prob = (prob * U24_MAX as f64) as u32;
                 let bit = self.coder.decode(int_24_prob)?;
                 self.model.update(bit as f64 - prob, bit);
                 res[byte_idx] |= bit << (7 - i);
@@ -103,14 +118,16 @@ mod tests {
 
     #[test]
     pub fn round_trip() {
-        let bootstrap_text = "for(w=c.width=185,a=c.getContext('2d'),a.drawImage(this,p=0,0),e='',d=a.getImageData(0,0,w,150).data;t=d[p+=4];)e+=String.fromCharCode(t);(1,eval)(e)";
+        let bootstrap_text = "for(w=c.width=185,e=c.getContext('2d'),e.drawImage(this,p=0,0),n='',d=e.getImageData(0,0,w,150).data;t=d[p+=4];)n+=String.fromCharCode(t);(1,eval)(e)";
 
         let mut test_data = String::new();
         // "tests/ray_tracer/index.js"
-        File::open("tests/ray_tracer/index.js")
-            .unwrap()
-            .read_to_string(&mut test_data)
-            .unwrap();
+        File::open(
+            "tests/ray_tracer/index.js", /*"tests/reore/reore_decompressed.bin"*/
+        )
+        .unwrap()
+        .read_to_string(&mut test_data)
+        .unwrap();
 
         let test_bytes = test_data.as_bytes();
 

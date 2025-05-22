@@ -24,9 +24,32 @@ impl ModelFinder {
             byte_mask |= 1 << i;
             model_defs.push(ModelDef {
                 byte_mask: byte_mask,
-                weight: 0.,
+                weight: 1.,
             });
         }
+
+        let mut byte_mask = 0;
+        for i in 0..4 {
+            byte_mask |= 1 << i;
+            model_defs.push(ModelDef {
+                byte_mask: byte_mask << 1,
+                weight: 1.,
+            });
+        }
+
+        let mut byte_mask = 0;
+        for i in 0..4 {
+            byte_mask |= 1 << i;
+            model_defs.push(ModelDef {
+                byte_mask: byte_mask << 2,
+                weight: 1.,
+            });
+        }
+
+        // model_defs.push(ModelDef {
+        //     byte_mask: 0b1111,
+        //     weight: 0.,
+        // });
 
         // let mut byte_mask = 0;
         // for i in 0..7 {
@@ -37,14 +60,14 @@ impl ModelFinder {
         //     });
         // }
 
-        let mut byte_mask = 0;
-        for i in 1..7 {
-            byte_mask = 1 << i;
-            model_defs.push(ModelDef {
-                byte_mask: byte_mask,
-                weight: 0.,
-            });
-        }
+        // let mut byte_mask = 0;
+        // for i in 0..8 {
+        //     byte_mask = 1 << i;
+        //     model_defs.push(ModelDef {
+        //         byte_mask: byte_mask,
+        //         weight: 0.,
+        //     });
+        // }
 
         // let mut byte_mask = 0;
         // for i in 0..4 {
