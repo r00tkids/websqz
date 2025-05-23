@@ -18,7 +18,7 @@ impl ModelFinder {
         let mut byte_mask = 0;
         model_defs.push(ModelDef {
             byte_mask: byte_mask,
-            weight: 0.,
+            weight: 1.,
         });
         for i in 0..8 {
             byte_mask |= 1 << i;

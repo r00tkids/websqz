@@ -93,7 +93,7 @@ impl NOrderBytePred {
 
         Self {
             ctx: 0,
-            bit_ctx: 0,
+            bit_ctx: 1,
             magic_num: hash(byte_mask as u32, 2).wrapping_mul(3),
             max_count: max_count,
             hash_table: hash_table,
@@ -203,7 +203,7 @@ impl LnMixerPred {
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {
-        const LEARNING_RATE: f64 = 0.001;
+        const LEARNING_RATE: f64 = 0.0009;
         let mut i = 0;
         for model in &mut self.models_with_weight {
             model.model.update(bit);
