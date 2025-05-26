@@ -1,8 +1,8 @@
 use crate::utils::U24_MAX;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, ops::Index, rc::Rc, vec};
 
 #[derive(Clone, Copy)]
-struct NOrderBytePredData(u32);
+pub struct NOrderBytePredData(u32);
 
 impl Default for NOrderBytePredData {
     fn default() -> Self {
@@ -29,9 +29,9 @@ impl NOrderBytePredData {
     }
 }
 
-pub struct HashTable {
-    table: Vec<[NOrderBytePredData; 256]>,
-    hash_shift: u32,
+pub struct HashTable<Record> {
+    table: Vec<Record>,
+    hash_mask: usize,
 }
 
 fn hash(mut value: u32, shift: u32) -> u32 {
@@ -40,39 +40,57 @@ fn hash(mut value: u32, shift: u32) -> u32 {
     K_MUL.wrapping_mul(value) >> shift
 }
 
-impl HashTable {
+impl<Record> HashTable<Record>
+where
+    Record: Default + Clone,
+{
     pub fn new(pow2_size: u32) -> Self {
         let context_size = (1 << pow2_size) as usize;
         println!(
             "Hash table Size: {} MiB",
-            (256 * 4 * context_size) / (1024 * 1024)
+            (size_of::<Record>() * context_size) / (1024 * 1024)
         );
-        Self {
-            table: vec![[NOrderBytePredData::default(); 256]; context_size],
-            hash_shift: 32 - pow2_size,
-        }
-    }
 
-    pub fn hash(&self, value: u32) -> u32 {
-        hash(value, self.hash_shift) as u32
+        Self {
+            table: vec![Record::default(); context_size],
+            hash_mask: (1 << pow2_size) - 1,
+        }
     }
 
     pub fn len(&self) -> usize {
         self.table.len()
     }
 
-    pub fn get<'a>(&'a self, key: u32, bit_ctx: u32) -> &'a NOrderBytePredData {
-        &self.table[key as usize][bit_ctx as usize]
+    pub fn get<'a>(&'a self, key: u32) -> &'a Record {
+        &self.table[key as usize & self.hash_mask]
     }
 
-    pub fn get_mut<'a>(&'a mut self, key: u32, bit_ctx: u32) -> &'a mut NOrderBytePredData {
-        &mut self.table[key as usize][bit_ctx as usize]
+    pub fn get_mut<'a>(&'a mut self, key: u32) -> &'a mut Record {
+        &mut self.table[key as usize & self.hash_mask]
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct NOrderBytePredDataRec([NOrderBytePredData; 255]);
+impl Default for NOrderBytePredDataRec {
+    fn default() -> Self {
+        Self([NOrderBytePredData::default(); 255])
+    }
+}
+
+impl NOrderBytePredDataRec {
+    fn get(&self, bit_ctx: u32) -> &NOrderBytePredData {
+        &self.0[bit_ctx as usize - 1]
+    }
+
+    fn get_mut(&mut self, bit_ctx: u32) -> &mut NOrderBytePredData {
+        &mut self.0[bit_ctx as usize - 1]
     }
 }
 
 pub struct NOrderBytePred {
     ctx: u32,
-    hash_table: Rc<RefCell<HashTable>>,
+    hash_table: Rc<RefCell<HashTable<NOrderBytePredData>>>,
     max_count: u32,
 
     magic_num: u32,
@@ -83,7 +101,11 @@ pub struct NOrderBytePred {
 }
 
 impl NOrderBytePred {
-    pub fn new(byte_mask: u8, hash_table: Rc<RefCell<HashTable>>, max_count: u32) -> Self {
+    pub fn new(
+        byte_mask: u8,
+        hash_table: Rc<RefCell<HashTable<NOrderBytePredData>>>,
+        max_count: u32,
+    ) -> Self {
         assert!(max_count <= 255);
 
         let mut bit_mask: u64 = 0;
@@ -102,19 +124,23 @@ impl NOrderBytePred {
         }
     }
 
-    pub fn prob(&self) -> Option<u32> {
-        let entry = self.hash_table.borrow().get(self.ctx, self.bit_ctx).clone();
+    pub fn prob(&self) -> Option<f64> {
+        let entry = self
+            .hash_table
+            .borrow()
+            .get(self.ctx ^ self.bit_ctx)
+            .clone();
         if entry.count() == 0 {
             return None;
         }
 
-        Some(entry.prob() as u32)
+        Some(entry.prob() as f64 / U24_MAX as f64)
     }
 
     pub fn update(&mut self, bit: u8) {
         {
             let mut hash_table = self.hash_table.borrow_mut();
-            let inst = hash_table.get_mut(self.ctx, self.bit_ctx);
+            let inst = hash_table.get_mut(self.ctx ^ self.bit_ctx);
 
             let (mut count, mut prob) = (inst.count(), inst.prob());
             if count < self.max_count {
@@ -135,11 +161,10 @@ impl NOrderBytePred {
 
             self.prev_bytes = ((self.prev_bytes << 8) | self.bit_ctx as u64) & self.mask;
             // Remove the extra leading bit before using it in the ctx
-            let new_c_hash = (hash((self.prev_bytes >> 32) as u32, 3)
+            self.ctx = (hash((self.prev_bytes >> 32) as u32, 3)
                 .wrapping_mul(9)
                 .wrapping_add(hash(self.prev_bytes as u32, 3)))
             .wrapping_mul(self.magic_num);
-            self.ctx = new_c_hash % self.hash_table.borrow().len() as u32;
 
             // Reset bit_ctx
             self.bit_ctx = 1;
@@ -161,11 +186,14 @@ pub struct ModelWithWeight {
 pub struct LnMixerPred {
     pub models_with_weight: Vec<ModelWithWeight>,
     last_stretched_p: Vec<Option<f64>>,
+    weights: Vec<Vec<Vec<f64>>>,
+    prev_byte: u32,
+    bit_ctx: u32,
 }
 
 impl LnMixerPred {
     pub fn new(model_defs: &Vec<ModelDef>) -> Self {
-        let hash_table = Rc::new(RefCell::new(HashTable::new(19)));
+        let hash_table = Rc::new(RefCell::new(HashTable::<NOrderBytePredData>::new(27)));
 
         let mut models_with_weight = Vec::new();
         for model_def in model_defs {
@@ -178,19 +206,28 @@ impl LnMixerPred {
         Self {
             last_stretched_p: vec![None; models_with_weight.len()],
             models_with_weight: models_with_weight,
+            weights: vec![vec![vec![]; 255]; 256],
+            bit_ctx: 1,
+            prev_byte: 0,
         }
     }
 
     pub fn prob(&mut self) -> f64 {
         let mut sum = 0.;
 
+        let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
         let mut i = 0;
         for model in &self.models_with_weight {
-            if let Some(prob) = model.model.prob() {
-                let p = prob as f64 / U24_MAX as f64;
+            let model_weight = if weights.is_empty() {
+                model.weight
+            } else {
+                weights[i] * 0.3 + model.weight
+            };
+
+            if let Some(p) = model.model.prob() {
                 let p_stretched = (p / (1. - p)).ln();
                 self.last_stretched_p[i] = Some(p_stretched);
-                sum += model.weight * p_stretched;
+                sum += model_weight * p_stretched;
             } else {
                 self.last_stretched_p[i] = None;
             }
@@ -203,85 +240,55 @@ impl LnMixerPred {
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {
-        const LEARNING_RATE: f64 = 0.0009;
+        let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
+
+        if weights.is_empty() {
+            weights.reserve(self.models_with_weight.len());
+            for i in 0..self.models_with_weight.len() {
+                weights.push(self.models_with_weight[i].weight);
+            }
+        }
+
+        const LEARNING_RATE: f64 = 0.0004;
+        const LEARNING_RATE_CTX: f64 = 0.04;
         let mut i = 0;
         for model in &mut self.models_with_weight {
             model.model.update(bit);
             if let Some(p) = self.last_stretched_p[i] {
                 model.weight += LEARNING_RATE * pred_err * p;
+                weights[i] += LEARNING_RATE_CTX * pred_err * p;
             }
             i += 1;
+        }
+
+        self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
+
+        if self.bit_ctx >= 256 {
+            self.bit_ctx &= 0xff;
+            self.prev_byte = self.bit_ctx;
+            self.bit_ctx = 1;
         }
     }
 }
 
-pub struct Float20x2([u8; 5]);
+pub struct SSEPredData([NOrderBytePredData; 32]);
 
-impl Float20x2 {
-    pub fn extract(&self) -> (f64, f64) {
-        let bytes = &self.0;
-        (
-            Self::unpack_f64(u32::from_le_bytes([bytes[0], bytes[1], bytes[2] & 0x0F, 0])),
-            Self::unpack_f64(u32::from_le_bytes([
-                (bytes[2] >> 4) & 0x0F,
-                bytes[3],
-                bytes[4],
-                0,
-            ])),
-        )
-    }
+pub struct AdaptiveProbabilityMap {
+    ctx: u32,
+    hash_table: Rc<RefCell<HashTable<SSEPredData>>>,
+    max_count: u32,
 
-    pub fn pack(&mut self, values: (f64, f64)) -> Self {
-        let mut bytes = [0; 5];
-        let (val1, val2) = values;
-        bytes[0..3].copy_from_slice(&u32::to_le_bytes(Self::pack_f64(val1))[0..3]);
+    magic_num: u32,
+    prev_bytes: u64,
+    mask: u64,
 
-        let val2_packed = Self::pack_f64(val2);
-        bytes[2] |= ((val2_packed & 0x0F) << 4) as u8;
-        bytes[3..5].copy_from_slice(&u32::to_le_bytes(val2_packed >> 4)[0..3]);
-        Self(bytes)
-    }
-
-    fn pack_f64(val: f64) -> u32 {
-        // Clamp value to range [-8.0, 8.0)
-        let clamped = val.max(-8.0).min(8.);
-        let sign = if clamped < 0.0 { 1 } else { 0 };
-        let abs_val = clamped.abs();
-        let int_part = abs_val as u32 & 0x7;
-        let frac = ((abs_val.fract()) * (1 << 16) as f64) as u32 & 0xFFFF;
-        (sign << 19) | (int_part << 16) | frac
-    }
-
-    /// Assumes the top bit is sign, next 3 bits are integer, next 16 bits are fraction (range: [-8, 8)).
-    fn unpack_f64(input: u32) -> f64 {
-        // Mask to 20 bits
-        let val = input & 0xFFFFF;
-        // Extract sign (bit 19)
-        let sign = if (val & 0x80000) != 0 { -1.0 } else { 1.0 };
-        // Extract integer part (bits 16..18)
-        let int_part = ((val >> 16) & 0x7) as f64;
-        // Extract fraction (bits 0..15)
-        let frac = (val & 0xFFFF) as f64 / (1 << 16) as f64;
-        sign * (int_part + frac)
-    }
+    bit_ctx: u32,
 }
-
-pub struct BitHistory {
-    weights: [u8; 5],
-}
-
-pub struct AdaptiveProbabilityMap {}
 
 impl AdaptiveProbabilityMap {
-    pub fn prob(&mut self) -> f64 {
+    pub fn prob(&mut self, p: f64) -> f64 {
         0.
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {}
 }
-
-/*
-        let id_escape_chars = [
-            '\n', '=', '.', '+', '-', '*', '/', ' ', '\t', ';', ',', '(', ')',
-        ];
-*/

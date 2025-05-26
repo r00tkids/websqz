@@ -110,8 +110,8 @@ impl ModelFinder {
     }
 
     pub fn learn_from(&mut self, mut byte_stream: impl Read) -> Result<()> {
-        let mut bytes = Vec::<u8>::new();
-        byte_stream.read_to_end(&mut bytes)?;
+        // let mut bytes = Vec::<u8>::new();
+        // byte_stream.read_to_end(&mut bytes)?;
 
         // let mut current_models = Vec::new();
         // let current_best_size = usize::MAX;
@@ -143,20 +143,18 @@ impl ModelFinder {
         //     }
         // }
 
-        let mut best_model = LnMixerPred::new(&self.model_defs);
-        for b in bytes {
-            for i in 0..8 {
-                let prob = best_model.prob();
-                let bit = (b >> (7 - i)) & 1;
-                best_model.update(bit as f64 - prob, bit);
-            }
-        }
+        // let mut best_model = LnMixerPred::new(&self.model_defs);
+        // for b in bytes {
+        //     for i in 0..8 {
+        //         let prob = best_model.prob();
+        //         let bit = (b >> (7 - i)) & 1;
+        //         best_model.update(bit as f64 - prob, bit);
+        //     }
+        // }
 
         // Normalize and update weights
-        let mut i = 0;
-        for model_with_weight in &best_model.models_with_weight {
-            self.model_defs[i].weight = model_with_weight.weight;
-            i += 1;
+        for i in 0..self.model_defs.len() {
+            self.model_defs[i].weight = 1. / self.model_defs.len() as f64; //model_with_weight.weight;
         }
 
         Ok(())
