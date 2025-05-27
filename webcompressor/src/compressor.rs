@@ -3,7 +3,10 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::utils::U24_MAX;
+use crate::{
+    bwt::{bwt, bwt_optimized},
+    utils::U24_MAX,
+};
 use crate::{
     coder::{ArithmeticDecoder, ArithmeticEncoder},
     model::LnMixerPred,
@@ -32,6 +35,7 @@ impl<W: Write> Encoder<W> {
     pub fn encode_bytes(mut self, mut byte_stream: impl Read) -> Result<W> {
         let mut bytes = Vec::<u8>::new();
         byte_stream.read_to_end(&mut bytes)?;
+        //bytes = bwt_optimized(&bytes);
 
         let mut b_idx = 0;
         while b_idx < bytes.len() {

@@ -45,8 +45,8 @@ impl<W: Write> ArithmeticEncoder<W> {
         // since at that point there isn't enough precision left in the MSB range to distinguish between 0 and 1 bit
         while (self.high ^ self.low) < (1 << 24) {
             self.output.write(&[(self.high >> 24) as u8])?;
-            self.low <<= 8;
-            self.high = self.high << 8 | 255;
+            self.low <<= 8; // Shift in 0x00
+            self.high = self.high << 8 | 0xFF; // Shift in 0xFF
         }
 
         Ok(())

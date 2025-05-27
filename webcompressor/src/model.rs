@@ -242,13 +242,6 @@ impl LnMixerPred {
     pub fn update(&mut self, pred_err: f64, bit: u8) {
         let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
 
-        if weights.is_empty() {
-            weights.reserve(self.models_with_weight.len());
-            for i in 0..self.models_with_weight.len() {
-                weights.push(self.models_with_weight[i].weight);
-            }
-        }
-
         const LEARNING_RATE: f64 = 0.0004;
         const LEARNING_RATE_CTX: f64 = 0.04;
         let mut i = 0;
@@ -256,9 +249,18 @@ impl LnMixerPred {
             model.model.update(bit);
             if let Some(p) = self.last_stretched_p[i] {
                 model.weight += LEARNING_RATE * pred_err * p;
-                weights[i] += LEARNING_RATE_CTX * pred_err * p;
+                if !weights.is_empty() {
+                    weights[i] += LEARNING_RATE_CTX * pred_err * p;
+                }
             }
             i += 1;
+        }
+
+        if weights.is_empty() {
+            weights.reserve(self.models_with_weight.len());
+            for i in 0..self.models_with_weight.len() {
+                weights.push(self.models_with_weight[i].weight);
+            }
         }
 
         self.bit_ctx = (self.bit_ctx << 1) | bit as u32;

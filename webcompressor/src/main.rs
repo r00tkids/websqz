@@ -2,6 +2,7 @@ use std::{fs::File, io::Read};
 
 use model_finder::ModelFinder;
 
+mod bwt;
 mod coder;
 mod compressor;
 mod model;
