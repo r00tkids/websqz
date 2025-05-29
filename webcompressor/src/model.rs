@@ -242,7 +242,8 @@ impl LnMixerPred {
             i += 1;
         }
 
-        self.sse.prob(sum)
+        //self.sse.prob(sum)
+        sum
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {
@@ -328,7 +329,7 @@ impl AdaptiveProbabilityMap {
 
     pub fn prob(&mut self, p: f64) -> f64 {
         let p_idx_f = (p * 2.).floor();
-        let mut p_idx = (p_idx_f as i32).max(-8).min(7) + 8;
+        let p_idx = (p_idx_f as i32).max(-8).min(7) + 8;
         self.current_prob_idx = p_idx as usize;
 
         let counter = &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)[p_idx as usize];
