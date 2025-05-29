@@ -1,5 +1,10 @@
-use crate::utils::U24_MAX;
-use std::{cell::RefCell, ops::Index, rc::Rc, vec};
+use crate::utils::{prob_squash, prob_stretch, U24_MAX};
+use std::{
+    cell::RefCell,
+    ops::{Index, IndexMut},
+    rc::Rc,
+    vec,
+};
 
 #[derive(Clone, Copy)]
 pub struct NOrderBytePredData(u32);
@@ -189,6 +194,7 @@ pub struct LnMixerPred {
     weights: Vec<Vec<Vec<f64>>>,
     prev_byte: u32,
     bit_ctx: u32,
+    sse: AdaptiveProbabilityMap,
 }
 
 impl LnMixerPred {
@@ -209,6 +215,7 @@ impl LnMixerPred {
             weights: vec![vec![vec![]; 255]; 256],
             bit_ctx: 1,
             prev_byte: 0,
+            sse: AdaptiveProbabilityMap::new(20),
         }
     }
 
@@ -225,7 +232,7 @@ impl LnMixerPred {
             };
 
             if let Some(p) = model.model.prob() {
-                let p_stretched = (p / (1. - p)).ln();
+                let p_stretched = prob_stretch(p);
                 self.last_stretched_p[i] = Some(p_stretched);
                 sum += model_weight * p_stretched;
             } else {
@@ -235,8 +242,7 @@ impl LnMixerPred {
             i += 1;
         }
 
-        // Squash it
-        1. / (1. + f64::exp(-sum))
+        self.sse.prob(sum)
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {
@@ -263,6 +269,8 @@ impl LnMixerPred {
             }
         }
 
+        self.sse.update(bit);
+
         self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
 
         if self.bit_ctx >= 256 {
@@ -273,14 +281,30 @@ impl LnMixerPred {
     }
 }
 
+#[derive(Clone, Default)]
 pub struct SSEPredData([NOrderBytePredData; 32]);
+
+impl Index<usize> for SSEPredData {
+    type Output = NOrderBytePredData;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for SSEPredData {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
 
 pub struct AdaptiveProbabilityMap {
     ctx: u32,
-    hash_table: Rc<RefCell<HashTable<SSEPredData>>>,
+    hash_table: HashTable<SSEPredData>,
     max_count: u32,
 
-    magic_num: u32,
+    current_prob_idx: usize,
+
     prev_bytes: u64,
     mask: u64,
 
@@ -288,9 +312,65 @@ pub struct AdaptiveProbabilityMap {
 }
 
 impl AdaptiveProbabilityMap {
-    pub fn prob(&mut self, p: f64) -> f64 {
-        0.
+    pub fn new(pow2_size: u32) -> AdaptiveProbabilityMap {
+        AdaptiveProbabilityMap {
+            ctx: 0,
+            hash_table: HashTable::<SSEPredData>::new(pow2_size),
+            max_count: 255,
+            current_prob_idx: 0,
+
+            prev_bytes: 0,
+            mask: 0xff,
+
+            bit_ctx: 1,
+        }
     }
 
-    pub fn update(&mut self, pred_err: f64, bit: u8) {}
+    pub fn prob(&mut self, p: f64) -> f64 {
+        let p_idx_f = (p * 2.).floor();
+        let mut p_idx = (p_idx_f as i32).max(-8).min(7) + 8;
+        self.current_prob_idx = p_idx as usize;
+
+        let counter = &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)[p_idx as usize];
+        if counter.count() == 0 {
+            let prob = (prob_squash(p) * U24_MAX as f64) as i32 & U24_MAX as i32;
+            counter.set_prob(prob);
+        }
+
+        let new_p = counter.prob() as f64 / U24_MAX as f64;
+        prob_stretch(new_p)
+    }
+
+    pub fn update(&mut self, bit: u8) {
+        {
+            let inst = &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)
+                [self.current_prob_idx as usize];
+
+            let (mut count, mut prob) = (inst.count(), inst.prob());
+            if count < self.max_count {
+                count += 1;
+            }
+
+            // Learning function
+            prob += (U24_MAX as f64
+                * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / ((count + 30) as f64 + 1.5)))
+                as i32;
+            inst.set_count(count);
+            inst.set_prob(prob);
+        }
+
+        self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
+        if self.bit_ctx >= 256 {
+            self.bit_ctx &= 0xff;
+
+            self.prev_bytes = ((self.prev_bytes << 8) | self.bit_ctx as u64) & self.mask;
+            // Remove the extra leading bit before using it in the ctx
+            self.ctx = hash((self.prev_bytes >> 32) as u32, 3)
+                .wrapping_mul(9)
+                .wrapping_add(hash(self.prev_bytes as u32, 3));
+
+            // Reset bit_ctx
+            self.bit_ctx = 1;
+        }
+    }
 }

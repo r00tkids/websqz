@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     bwt::{bwt, bwt_optimized},
-    utils::U24_MAX,
+    utils::{prob_squash, U24_MAX},
 };
 use crate::{
     coder::{ArithmeticDecoder, ArithmeticEncoder},
@@ -41,7 +41,7 @@ impl<W: Write> Encoder<W> {
         while b_idx < bytes.len() {
             let b = bytes[b_idx];
             for i in 0..8 {
-                let prob = self.model.prob();
+                let prob = prob_squash(self.model.prob());
                 let int_24_prob = (prob * U24_MAX as f64) as u32;
                 let bit = (b >> (7 - i)) & 1;
                 self.coder.encode(bit, int_24_prob)?;
@@ -58,7 +58,7 @@ impl<W: Write> Encoder<W> {
         byte_stream.read_to_end(&mut bytes)?;
         for b in bytes {
             for i in 0..8 {
-                let prob = self.model.prob();
+                let prob = prob_squash(self.model.prob());
                 let bit = (b >> (7 - i)) & 1;
                 self.model.update(bit as f64 - prob, bit);
             }
@@ -85,7 +85,7 @@ impl<R: Read> Decoder<R> {
         let mut res: Vec<u8> = vec![0; size];
         for byte_idx in 0..size {
             for i in 0..8 {
-                let prob = self.model.prob();
+                let prob = prob_squash(self.model.prob());
                 let int_24_prob = (prob * U24_MAX as f64) as u32;
                 let bit = self.coder.decode(int_24_prob)?;
                 self.model.update(bit as f64 - prob, bit);
@@ -101,7 +101,7 @@ impl<R: Read> Decoder<R> {
         byte_stream.read_to_end(&mut bytes)?;
         for b in bytes {
             for i in 0..8 {
-                let prob = self.model.prob();
+                let prob = prob_squash(self.model.prob());
                 let bit = (b >> (7 - i)) & 1;
                 self.model.update(bit as f64 - prob, bit);
             }
