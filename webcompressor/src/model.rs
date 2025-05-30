@@ -195,6 +195,8 @@ pub struct LnMixerPred {
     prev_byte: u32,
     bit_ctx: u32,
     sse: AdaptiveProbabilityMap,
+    word_pred: WordPred,
+    word_pred_weight: f64,
 }
 
 impl LnMixerPred {
@@ -216,6 +218,8 @@ impl LnMixerPred {
             bit_ctx: 1,
             prev_byte: 0,
             sse: AdaptiveProbabilityMap::new(20),
+            word_pred: WordPred::new(20, 255),
+            word_pred_weight: 0.4,
         }
     }
 
@@ -242,8 +246,10 @@ impl LnMixerPred {
             i += 1;
         }
 
-        //self.sse.prob(sum)
-        sum
+        let mut p_stretched = prob_stretch(self.word_pred.prob());
+        p_stretched *= self.word_pred_weight;
+
+        sum + p_stretched
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {
@@ -269,6 +275,9 @@ impl LnMixerPred {
                 weights.push(self.models_with_weight[i].weight);
             }
         }
+
+        self.word_pred_weight += 0.004 * pred_err * prob_stretch(self.word_pred.prob());
+        self.word_pred.update(bit);
 
         self.sse.update(bit);
 
@@ -321,13 +330,14 @@ impl AdaptiveProbabilityMap {
             current_prob_idx: 0,
 
             prev_bytes: 0,
-            mask: 0xff,
+            mask: 0x00,
 
             bit_ctx: 1,
         }
     }
 
     pub fn prob(&mut self, p: f64) -> f64 {
+        // TODO: Interpolate probabilities
         let p_idx_f = (p * 2.).floor();
         let p_idx = (p_idx_f as i32).max(-8).min(7) + 8;
         self.current_prob_idx = p_idx as usize;
@@ -339,7 +349,7 @@ impl AdaptiveProbabilityMap {
         }
 
         let new_p = counter.prob() as f64 / U24_MAX as f64;
-        prob_stretch(new_p)
+        prob_stretch(new_p) + p
     }
 
     pub fn update(&mut self, bit: u8) {
@@ -369,6 +379,83 @@ impl AdaptiveProbabilityMap {
             self.ctx = hash((self.prev_bytes >> 32) as u32, 3)
                 .wrapping_mul(9)
                 .wrapping_add(hash(self.prev_bytes as u32, 3));
+
+            // Reset bit_ctx
+            self.bit_ctx = 1;
+        }
+    }
+}
+
+pub struct WordPred {
+    ctx: u32,
+    hash_table: HashTable<NOrderBytePredData>,
+    max_count: u32,
+
+    current_word: u32,
+    prev_words: [u32; 3],
+
+    bit_ctx: u32,
+}
+
+impl WordPred {
+    pub fn new(pow2_size: u32, max_count: u32) -> Self {
+        assert!(max_count <= 255);
+
+        Self {
+            ctx: 0,
+            bit_ctx: 1,
+            max_count: max_count,
+            hash_table: HashTable::new(pow2_size),
+            prev_words: [0; 3],
+            current_word: 0,
+        }
+    }
+
+    pub fn prob(&self) -> f64 {
+        let entry = self.hash_table.get(self.ctx ^ self.bit_ctx).clone();
+        entry.prob() as f64 / U24_MAX as f64
+    }
+
+    pub fn update(&mut self, bit: u8) {
+        {
+            let inst = self.hash_table.get_mut(self.ctx ^ self.bit_ctx);
+
+            let (mut count, mut prob) = (inst.count(), inst.prob());
+            if count < self.max_count {
+                count += 1;
+            }
+
+            // Learning function
+            prob += (U24_MAX as f64
+                * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / (count as f64 + 0.1)))
+                as i32;
+            inst.set_count(count);
+            inst.set_prob(prob);
+        }
+
+        self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
+        if self.bit_ctx >= 256 {
+            self.bit_ctx &= 0xff;
+
+            let next_char = self.bit_ctx as u8 as char;
+            if next_char.is_alphanumeric() {
+                self.current_word = self
+                    .current_word
+                    .wrapping_mul(21)
+                    .wrapping_add(next_char.to_lowercase().next().unwrap() as u32);
+            } else if self.current_word != 0 {
+                // Shift previous words
+                self.prev_words[0] = self.prev_words[1];
+                self.prev_words[1] = self.current_word;
+                self.current_word = 0;
+            }
+
+            // Remove the extra leading bit before using it in the ctx
+            self.ctx = (hash(self.prev_words[0], 3))
+                .wrapping_mul(9)
+                .wrapping_add(hash(self.prev_words[1], 3))
+                .wrapping_mul(9)
+                .wrapping_add(hash(self.current_word, 3));
 
             // Reset bit_ctx
             self.bit_ctx = 1;
