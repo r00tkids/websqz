@@ -218,8 +218,8 @@ impl LnMixerPred {
             bit_ctx: 1,
             prev_byte: 0,
             sse: AdaptiveProbabilityMap::new(20),
-            word_pred: WordPred::new(20, 255),
-            word_pred_weight: 0.4,
+            word_pred: WordPred::new(21, 255),
+            word_pred_weight: 0.9,
         }
     }
 
@@ -435,27 +435,22 @@ impl WordPred {
 
         self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
         if self.bit_ctx >= 256 {
+            // Remove the extra leading bit before using it in the ctx
             self.bit_ctx &= 0xff;
 
             let next_char = self.bit_ctx as u8 as char;
             if next_char.is_alphanumeric() {
-                self.current_word = self
-                    .current_word
-                    .wrapping_mul(21)
-                    .wrapping_add(next_char.to_lowercase().next().unwrap() as u32);
+                self.current_word =
+                    self.current_word ^ next_char.to_lowercase().next().unwrap() as u32;
+                self.current_word = self.current_word.wrapping_mul(16777619);
             } else if self.current_word != 0 {
                 // Shift previous words
                 self.prev_words[0] = self.prev_words[1];
                 self.prev_words[1] = self.current_word;
-                self.current_word = 0;
+                self.current_word = 2166136261;
             }
 
-            // Remove the extra leading bit before using it in the ctx
-            self.ctx = (hash(self.prev_words[0], 3))
-                .wrapping_mul(9)
-                .wrapping_add(hash(self.prev_words[1], 3))
-                .wrapping_mul(9)
-                .wrapping_add(hash(self.current_word, 3));
+            self.ctx = self.current_word.wrapping_mul(3);
 
             // Reset bit_ctx
             self.bit_ctx = 1;

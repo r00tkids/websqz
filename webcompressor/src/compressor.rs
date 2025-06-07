@@ -127,7 +127,7 @@ mod tests {
         let mut test_data = String::new();
         // "tests/ray_tracer/index.js"
         File::open(
-            /*"tests/ray_tracer/index.js",*/ "tests/reore/reore_decompressed.bin",
+            "tests/reore/reore_decompressed.bin", //"tests/ray_tracer/index.js", // "tests/reore/reore_decompressed.bin",
         )
         .unwrap()
         .read_to_string(&mut test_data)

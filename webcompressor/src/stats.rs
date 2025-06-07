@@ -3,7 +3,10 @@ use std::{
     io::{BufWriter, Read, Write},
 };
 
-use crate::model::{LnMixerPred, ModelDef};
+use crate::{
+    model::{LnMixerPred, ModelDef},
+    utils::prob_squash,
+};
 use anyhow::Result;
 
 pub struct StatsGenerator {}
@@ -23,7 +26,7 @@ impl StatsGenerator {
         for b in bytes {
             let mut avg_pred_err_byte = 0.;
             for i in 0..8 {
-                let prob = model.prob();
+                let prob = prob_squash(model.prob());
                 let bit = (b >> (7 - i)) & 1;
                 let pred_err = bit as f64 - prob;
                 avg_pred_err_byte += pred_err.abs();
