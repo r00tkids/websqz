@@ -249,7 +249,7 @@ impl LnMixerPred {
         let mut p_stretched = prob_stretch(self.word_pred.prob());
         p_stretched *= self.word_pred_weight;
 
-        sum + p_stretched
+        self.sse.prob(sum + p_stretched)
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {
@@ -330,7 +330,7 @@ impl AdaptiveProbabilityMap {
             current_prob_idx: 0,
 
             prev_bytes: 0,
-            mask: 0x00,
+            mask: 0xffffff,
 
             bit_ctx: 1,
         }
@@ -338,18 +338,58 @@ impl AdaptiveProbabilityMap {
 
     pub fn prob(&mut self, p: f64) -> f64 {
         // TODO: Interpolate probabilities
-        let p_idx_f = (p * 2.).floor();
-        let p_idx = (p_idx_f as i32).max(-8).min(7) + 8;
-        self.current_prob_idx = p_idx as usize;
+        let p_ptr = p.max(-8.).min(7.5) * 2.;
+        let p_idx_f = p_ptr.floor();
+        let p_idx_c = p_ptr.ceil();
 
-        let counter = &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)[p_idx as usize];
-        if counter.count() == 0 {
-            let prob = (prob_squash(p) * U24_MAX as f64) as i32 & U24_MAX as i32;
-            counter.set_prob(prob);
+        let delta_f = p_ptr - p_idx_f;
+        let delta_c = p_idx_c - p_ptr;
+        let mut t;
+        let mut next_idx;
+        if delta_f <= delta_c {
+            // Use floor
+            self.current_prob_idx = (p_idx_f as i32 + 16) as usize;
+            next_idx = self.current_prob_idx + 1;
+            if next_idx >= 32 {
+                next_idx = 31;
+            }
+            t = 1. - delta_f;
+        } else {
+            // Use ceil
+            self.current_prob_idx = (p_idx_c as i32 + 16) as usize;
+            next_idx = self.current_prob_idx - 1;
+            t = 1. - delta_c;
+        }
+        if next_idx >= 32 {
+            println!(
+                "Warning: next_idx is out of bounds: {}, {}, {}, {}, {}",
+                next_idx, self.current_prob_idx, t, p, p_ptr
+            );
         }
 
-        let new_p = counter.prob() as f64 / U24_MAX as f64;
-        prob_stretch(new_p) + p
+        let counter1 = {
+            let counter1: &mut NOrderBytePredData =
+                &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)[self.current_prob_idx];
+            if counter1.count() == 0 {
+                let prob = (prob_squash(p) * U24_MAX as f64) as i32 & U24_MAX as i32;
+                counter1.set_prob(prob);
+            }
+            counter1.clone()
+        };
+
+        let counter2 = {
+            let counter2: &mut NOrderBytePredData =
+                &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)[next_idx];
+            if counter2.count() == 0 {
+                let prob = (prob_squash(p) * U24_MAX as f64) as i32 & U24_MAX as i32;
+                counter2.set_prob(prob);
+            }
+            counter2.clone()
+        };
+
+        let new_p = t * (counter1.prob() as f64 / U24_MAX as f64)
+            + (1. - t) * (counter2.prob() as f64 / U24_MAX as f64);
+        prob_stretch(new_p)
     }
 
     pub fn update(&mut self, bit: u8) {
@@ -456,4 +496,9 @@ impl WordPred {
             self.bit_ctx = 1;
         }
     }
+}
+
+trait Model {
+    fn pred(&mut self) -> f64;
+    fn update(&mut self, bit: u8);
 }
