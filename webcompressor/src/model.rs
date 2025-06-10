@@ -129,7 +129,7 @@ impl NOrderBytePred {
         }
     }
 
-    pub fn prob(&self) -> Option<f64> {
+    pub fn pred(&self) -> Option<f64> {
         let entry = self
             .hash_table
             .borrow()
@@ -194,7 +194,6 @@ pub struct LnMixerPred {
     weights: Vec<Vec<Vec<f64>>>,
     prev_byte: u32,
     bit_ctx: u32,
-    sse: AdaptiveProbabilityMap,
     word_pred: WordPred,
     word_pred_weight: f64,
 }
@@ -217,13 +216,12 @@ impl LnMixerPred {
             weights: vec![vec![vec![]; 255]; 256],
             bit_ctx: 1,
             prev_byte: 0,
-            sse: AdaptiveProbabilityMap::new(20),
             word_pred: WordPred::new(21, 255),
             word_pred_weight: 0.9,
         }
     }
 
-    pub fn prob(&mut self) -> f64 {
+    pub fn pred(&mut self) -> f64 {
         let mut sum = 0.;
 
         let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
@@ -235,7 +233,7 @@ impl LnMixerPred {
                 weights[i] * 0.3 + model.weight
             };
 
-            if let Some(p) = model.model.prob() {
+            if let Some(p) = model.model.pred() {
                 let p_stretched = prob_stretch(p);
                 self.last_stretched_p[i] = Some(p_stretched);
                 sum += model_weight * p_stretched;
@@ -246,10 +244,10 @@ impl LnMixerPred {
             i += 1;
         }
 
-        let mut p_stretched = prob_stretch(self.word_pred.prob());
+        let mut p_stretched = prob_stretch(self.word_pred.pred());
         p_stretched *= self.word_pred_weight;
 
-        self.sse.prob(sum + p_stretched)
+        sum + p_stretched
     }
 
     pub fn update(&mut self, pred_err: f64, bit: u8) {
@@ -276,10 +274,8 @@ impl LnMixerPred {
             }
         }
 
-        self.word_pred_weight += 0.004 * pred_err * prob_stretch(self.word_pred.prob());
+        self.word_pred_weight += 0.004 * pred_err * prob_stretch(self.word_pred.pred());
         self.word_pred.update(bit);
-
-        self.sse.update(bit);
 
         self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
 
@@ -319,10 +315,12 @@ pub struct AdaptiveProbabilityMap {
     mask: u64,
 
     bit_ctx: u32,
+
+    input_model: Box<dyn Model>,
 }
 
 impl AdaptiveProbabilityMap {
-    pub fn new(pow2_size: u32) -> AdaptiveProbabilityMap {
+    pub fn new(pow2_size: u32, input_model: impl Model + 'static) -> AdaptiveProbabilityMap {
         AdaptiveProbabilityMap {
             ctx: 0,
             hash_table: HashTable::<SSEPredData>::new(pow2_size),
@@ -333,10 +331,12 @@ impl AdaptiveProbabilityMap {
             mask: 0xffffff,
 
             bit_ctx: 1,
+            input_model: Box::new(input_model),
         }
     }
 
-    pub fn prob(&mut self, p: f64) -> f64 {
+    pub fn pred(&mut self) -> f64 {
+        let p = self.input_model.pred();
         // TODO: Interpolate probabilities
         let p_ptr = p.max(-8.).min(7.5) * 2.;
         let p_idx_f = p_ptr.floor();
@@ -392,7 +392,7 @@ impl AdaptiveProbabilityMap {
         prob_stretch(new_p)
     }
 
-    pub fn update(&mut self, bit: u8) {
+    pub fn update(&mut self, pred_err: f64, bit: u8) {
         {
             let inst = &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)
                 [self.current_prob_idx as usize];
@@ -423,6 +423,8 @@ impl AdaptiveProbabilityMap {
             // Reset bit_ctx
             self.bit_ctx = 1;
         }
+
+        self.input_model.update(pred_err, bit);
     }
 }
 
@@ -451,7 +453,7 @@ impl WordPred {
         }
     }
 
-    pub fn prob(&self) -> f64 {
+    pub fn pred(&self) -> f64 {
         let entry = self.hash_table.get(self.ctx ^ self.bit_ctx).clone();
         entry.prob() as f64 / U24_MAX as f64
     }
@@ -498,7 +500,47 @@ impl WordPred {
     }
 }
 
-trait Model {
+pub trait Model {
     fn pred(&mut self) -> f64;
-    fn update(&mut self, bit: u8);
+    fn update(&mut self, pred_err: f64, bit: u8);
+}
+
+impl Model for NOrderBytePred {
+    fn pred(&mut self) -> f64 {
+        NOrderBytePred::pred(self).map_or(0.5, |p| prob_stretch(p))
+    }
+
+    fn update(&mut self, pred_err: f64, bit: u8) {
+        self.update(bit);
+    }
+}
+
+impl Model for LnMixerPred {
+    fn pred(&mut self) -> f64 {
+        self.pred()
+    }
+
+    fn update(&mut self, pred_err: f64, bit: u8) {
+        self.update(pred_err, bit);
+    }
+}
+
+impl Model for AdaptiveProbabilityMap {
+    fn pred(&mut self) -> f64 {
+        self.pred()
+    }
+
+    fn update(&mut self, pred_err: f64, bit: u8) {
+        self.update(pred_err, bit);
+    }
+}
+
+impl Model for WordPred {
+    fn pred(&mut self) -> f64 {
+        WordPred::pred(self)
+    }
+
+    fn update(&mut self, pred_err: f64, bit: u8) {
+        self.update(bit);
+    }
 }

@@ -108,7 +108,7 @@ impl ModelFinder {
         let mut coder = ArithmeticEncoder::new(result).unwrap();
         for b in bytes {
             for i in 0..8 {
-                let prob = model.prob();
+                let prob = model.pred();
                 let bit = (b >> (7 - i)) & 1;
                 let int_24_prob = (prob * U24_MAX as f64) as u32;
 
