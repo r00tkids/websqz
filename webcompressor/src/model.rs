@@ -142,7 +142,7 @@ impl NOrderBytePred {
         Some(entry.prob() as f64 / U24_MAX as f64)
     }
 
-    pub fn update(&mut self, bit: u8) {
+    pub fn learn(&mut self, bit: u8) {
         {
             let mut hash_table = self.hash_table.borrow_mut();
             let inst = hash_table.get_mut(self.ctx ^ self.bit_ctx);
@@ -250,14 +250,14 @@ impl LnMixerPred {
         sum + p_stretched
     }
 
-    pub fn update(&mut self, pred_err: f64, bit: u8) {
+    pub fn learn(&mut self, pred_err: f64, bit: u8) {
         let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
 
         const LEARNING_RATE: f64 = 0.0004;
         const LEARNING_RATE_CTX: f64 = 0.04;
         let mut i = 0;
         for model in &mut self.models_with_weight {
-            model.model.update(bit);
+            model.model.learn(bit);
             if let Some(p) = self.last_stretched_p[i] {
                 model.weight += LEARNING_RATE * pred_err * p;
                 if !weights.is_empty() {
@@ -275,7 +275,7 @@ impl LnMixerPred {
         }
 
         self.word_pred_weight += 0.004 * pred_err * prob_stretch(self.word_pred.pred());
-        self.word_pred.update(bit);
+        self.word_pred.learn(bit);
 
         self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
 
@@ -392,7 +392,7 @@ impl AdaptiveProbabilityMap {
         prob_stretch(new_p)
     }
 
-    pub fn update(&mut self, pred_err: f64, bit: u8) {
+    pub fn learn(&mut self, pred_err: f64, bit: u8) {
         {
             let inst = &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)
                 [self.current_prob_idx as usize];
@@ -424,7 +424,7 @@ impl AdaptiveProbabilityMap {
             self.bit_ctx = 1;
         }
 
-        self.input_model.update(pred_err, bit);
+        self.input_model.learn(pred_err, bit);
     }
 }
 
@@ -458,7 +458,7 @@ impl WordPred {
         entry.prob() as f64 / U24_MAX as f64
     }
 
-    pub fn update(&mut self, bit: u8) {
+    pub fn learn(&mut self, bit: u8) {
         {
             let inst = self.hash_table.get_mut(self.ctx ^ self.bit_ctx);
 
@@ -502,7 +502,7 @@ impl WordPred {
 
 pub trait Model {
     fn pred(&mut self) -> f64;
-    fn update(&mut self, pred_err: f64, bit: u8);
+    fn learn(&mut self, pred_err: f64, bit: u8);
 }
 
 impl Model for NOrderBytePred {
@@ -510,8 +510,8 @@ impl Model for NOrderBytePred {
         NOrderBytePred::pred(self).map_or(0.5, |p| prob_stretch(p))
     }
 
-    fn update(&mut self, pred_err: f64, bit: u8) {
-        self.update(bit);
+    fn learn(&mut self, pred_err: f64, bit: u8) {
+        self.learn(bit);
     }
 }
 
@@ -520,8 +520,8 @@ impl Model for LnMixerPred {
         self.pred()
     }
 
-    fn update(&mut self, pred_err: f64, bit: u8) {
-        self.update(pred_err, bit);
+    fn learn(&mut self, pred_err: f64, bit: u8) {
+        self.learn(pred_err, bit);
     }
 }
 
@@ -530,8 +530,8 @@ impl Model for AdaptiveProbabilityMap {
         self.pred()
     }
 
-    fn update(&mut self, pred_err: f64, bit: u8) {
-        self.update(pred_err, bit);
+    fn learn(&mut self, pred_err: f64, bit: u8) {
+        self.learn(pred_err, bit);
     }
 }
 
@@ -540,7 +540,7 @@ impl Model for WordPred {
         WordPred::pred(self)
     }
 
-    fn update(&mut self, pred_err: f64, bit: u8) {
-        self.update(bit);
+    fn learn(&mut self, pred_err: f64, bit: u8) {
+        self.learn(bit);
     }
 }

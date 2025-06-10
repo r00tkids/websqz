@@ -113,7 +113,7 @@ impl ModelFinder {
                 let int_24_prob = (prob * U24_MAX as f64) as u32;
 
                 coder.encode(bit, int_24_prob);
-                model.update(bit as f64 - prob, bit);
+                model.learn(bit as f64 - prob, bit);
             }
         }
 

@@ -30,7 +30,7 @@ impl StatsGenerator {
                 let bit = (b >> (7 - i)) & 1;
                 let pred_err = bit as f64 - prob;
                 avg_pred_err_byte += pred_err.abs();
-                model.update(pred_err, bit);
+                model.learn(pred_err, bit);
             }
 
             avg_pred_err_byte *= ONE_OVER_8;
