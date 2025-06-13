@@ -2,13 +2,15 @@ use std::io::Read;
 
 use crate::{
     coder::ArithmeticEncoder,
-    model::{LnMixerPred, ModelDef},
+    compress_config::ModelConfig,
+    model::{LnMixerPred, Model, ModelDef},
     utils::U24_MAX,
 };
 use anyhow::Result;
 
 pub struct ModelFinder {
     pub model_defs: Vec<ModelDef>,
+    pub default_model: Box<dyn Model>,
 }
 
 impl ModelFinder {
@@ -46,8 +48,82 @@ impl ModelFinder {
             });
         }
 
+        let model = Box::new(ModelConfig::AdaptiveProbabilityMap(Box::new(
+            ModelConfig::Mixer(vec![
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00000000".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00000001".to_string(),
+                    pow2_size: 24,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00000011".to_string(),
+                    pow2_size: 24,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00000111".to_string(),
+                    pow2_size: 24,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00001111".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00011111".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00111111".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b01111111".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b11111111".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00000010".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00000110".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00001110".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00011110".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00000100".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00001100".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00011100".to_string(),
+                    pow2_size: 23,
+                },
+                ModelConfig::NOrderBytePred {
+                    byte_mask: "0b00111100".to_string(),
+                    pow2_size: 23,
+                },
+            ]),
+        )));
+
         Self {
             model_defs: model_defs,
+            default_model: model.create_model().unwrap(),
         }
     }
 
@@ -103,20 +179,21 @@ impl ModelFinder {
     }
 
     pub fn test_model_defs(model_defs: &Vec<ModelDef>, bytes: &[u8]) -> usize {
-        let mut model = LnMixerPred::new(model_defs);
-        let result = Vec::new();
-        let mut coder = ArithmeticEncoder::new(result).unwrap();
-        for b in bytes {
-            for i in 0..8 {
-                let prob = model.pred();
-                let bit = (b >> (7 - i)) & 1;
-                let int_24_prob = (prob * U24_MAX as f64) as u32;
+        // let mut model = LnMixerPred::new(model_defs);
+        // let result = Vec::new();
+        // let mut coder = ArithmeticEncoder::new(result).unwrap();
+        // for b in bytes {
+        //     for i in 0..8 {
+        //         let prob = model.pred();
+        //         let bit = (b >> (7 - i)) & 1;
+        //         let int_24_prob = (prob * U24_MAX as f64) as u32;
 
-                coder.encode(bit, int_24_prob);
-                model.learn(bit as f64 - prob, bit);
-            }
-        }
+        //         coder.encode(bit, int_24_prob);
+        //         model.learn(bit as f64 - prob, bit);
+        //     }
+        // }
 
-        coder.finish().unwrap().len()
+        // coder.finish().unwrap().len()
+        0
     }
 }

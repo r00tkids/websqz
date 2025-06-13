@@ -20,10 +20,10 @@ struct Encoder<W: Write> {
 }
 
 impl<W: Write> Encoder<W> {
-    pub fn new(model: impl Model + 'static, output: W) -> Result<Self> {
+    pub fn new(model: Box<dyn Model>, output: W) -> Result<Self> {
         Ok(Self {
             coder: ArithmeticEncoder::new(output)?,
-            model: Box::new(model),
+            model: model,
         })
     }
 
@@ -75,10 +75,10 @@ struct Decoder<R: Read> {
 }
 
 impl<R: Read> Decoder<R> {
-    pub fn new(model: impl Model + 'static, read_stream: R) -> Result<Self> {
+    pub fn new(model: Box<dyn Model>, read_stream: R) -> Result<Self> {
         Ok(Self {
             coder: ArithmeticDecoder::new(read_stream)?,
-            model: Box::new(model),
+            model: model,
         })
     }
 
@@ -135,11 +135,8 @@ mod tests {
         let test_bytes = test_data.as_bytes();
 
         let mut model_finder = ModelFinder::new();
-        model_finder.learn_from(test_bytes).unwrap();
-        let model_defs = &model_finder.model_defs;
-        println!("{:?}", model_defs);
         let encoded_data = {
-            let model = AdaptiveProbabilityMap::new(20, LnMixerPred::new(model_defs));
+            let model = model_finder.default_model;
             let encoded_data: Vec<u8> = Vec::new();
             let mut encoder = Encoder::new(model, encoded_data).unwrap();
             encoder.warm_up(bootstrap_text.as_bytes()).unwrap();
@@ -152,7 +149,8 @@ mod tests {
             encoded_data.len()
         );
 
-        let model = AdaptiveProbabilityMap::new(20, LnMixerPred::new(model_defs));
+        let mut model_finder = ModelFinder::new();
+        let model = model_finder.default_model;
         let mut decoder = Decoder::new(model, encoded_data.as_slice()).unwrap();
 
         decoder.warm_up(bootstrap_text.as_bytes()).unwrap();

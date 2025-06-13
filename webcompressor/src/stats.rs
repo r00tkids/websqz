@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    model::{LnMixerPred, ModelDef},
+    model::{LnMixerPred, Model, ModelDef},
     utils::prob_squash,
 };
 use anyhow::Result;
@@ -12,11 +12,10 @@ use anyhow::Result;
 pub struct StatsGenerator {}
 
 impl StatsGenerator {
-    pub fn gather_and_dump(mut byte_stream: impl Read, model_defs: &Vec<ModelDef>) -> Result<()> {
+    pub fn gather_and_dump(mut byte_stream: impl Read, mut model: Box<dyn Model>) -> Result<()> {
         const ONE_OVER_8: f64 = 1. / 8.;
         let mut bytes = Vec::<u8>::new();
         byte_stream.read_to_end(&mut bytes)?;
-        let mut model = LnMixerPred::new(&model_defs);
 
         let output_file = File::create("output.html")?;
         let mut output = BufWriter::new(output_file);

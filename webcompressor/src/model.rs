@@ -184,7 +184,7 @@ pub struct ModelDef {
 }
 
 pub struct ModelWithWeight {
-    pub model: NOrderBytePred,
+    pub model: Box<dyn Model>,
     pub weight: f64,
 }
 
@@ -199,14 +199,13 @@ pub struct LnMixerPred {
 }
 
 impl LnMixerPred {
-    pub fn new(model_defs: &Vec<ModelDef>) -> Self {
-        let hash_table = Rc::new(RefCell::new(HashTable::<NOrderBytePredData>::new(27)));
-
+    pub fn new(models: Vec<Box<dyn Model>>) -> Self {
+        let num_models = models.len();
         let mut models_with_weight = Vec::new();
-        for model_def in model_defs {
+        for model in models {
             models_with_weight.push(ModelWithWeight {
-                model: NOrderBytePred::new(model_def.byte_mask, hash_table.clone(), 255),
-                weight: model_def.weight,
+                model: model,
+                weight: 1. / num_models as f64, // Default weight, adjusted by learning later
             });
         }
 
@@ -226,20 +225,17 @@ impl LnMixerPred {
 
         let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
         let mut i = 0;
-        for model in &self.models_with_weight {
+        for model in &mut self.models_with_weight {
             let model_weight = if weights.is_empty() {
                 model.weight
             } else {
                 weights[i] * 0.3 + model.weight
             };
 
-            if let Some(p) = model.model.pred() {
-                let p_stretched = prob_stretch(p);
-                self.last_stretched_p[i] = Some(p_stretched);
-                sum += model_weight * p_stretched;
-            } else {
-                self.last_stretched_p[i] = None;
-            }
+            let p = model.model.pred();
+            let p_stretched = prob_stretch(p);
+            self.last_stretched_p[i] = Some(p_stretched);
+            sum += model_weight * p_stretched;
 
             i += 1;
         }
@@ -257,7 +253,7 @@ impl LnMixerPred {
         const LEARNING_RATE_CTX: f64 = 0.04;
         let mut i = 0;
         for model in &mut self.models_with_weight {
-            model.model.learn(bit);
+            model.model.learn(pred_err, bit);
             if let Some(p) = self.last_stretched_p[i] {
                 model.weight += LEARNING_RATE * pred_err * p;
                 if !weights.is_empty() {
@@ -320,7 +316,7 @@ pub struct AdaptiveProbabilityMap {
 }
 
 impl AdaptiveProbabilityMap {
-    pub fn new(pow2_size: u32, input_model: impl Model + 'static) -> AdaptiveProbabilityMap {
+    pub fn new(pow2_size: u32, input_model: Box<dyn Model>) -> AdaptiveProbabilityMap {
         AdaptiveProbabilityMap {
             ctx: 0,
             hash_table: HashTable::<SSEPredData>::new(pow2_size),
@@ -331,7 +327,7 @@ impl AdaptiveProbabilityMap {
             mask: 0xffffff,
 
             bit_ctx: 1,
-            input_model: Box::new(input_model),
+            input_model: input_model,
         }
     }
 
@@ -507,11 +503,11 @@ pub trait Model {
 
 impl Model for NOrderBytePred {
     fn pred(&mut self) -> f64 {
-        NOrderBytePred::pred(self).map_or(0.5, |p| prob_stretch(p))
+        NOrderBytePred::pred(self).unwrap_or(0.5)
     }
 
     fn learn(&mut self, pred_err: f64, bit: u8) {
-        self.learn(bit);
+        NOrderBytePred::learn(self, bit);
     }
 }
 
@@ -521,17 +517,17 @@ impl Model for LnMixerPred {
     }
 
     fn learn(&mut self, pred_err: f64, bit: u8) {
-        self.learn(pred_err, bit);
+        LnMixerPred::learn(self, pred_err, bit);
     }
 }
 
 impl Model for AdaptiveProbabilityMap {
     fn pred(&mut self) -> f64 {
-        self.pred()
+        AdaptiveProbabilityMap::pred(self)
     }
 
     fn learn(&mut self, pred_err: f64, bit: u8) {
-        self.learn(pred_err, bit);
+        AdaptiveProbabilityMap::learn(self, pred_err, bit);
     }
 }
 
@@ -541,6 +537,6 @@ impl Model for WordPred {
     }
 
     fn learn(&mut self, pred_err: f64, bit: u8) {
-        self.learn(bit);
+        WordPred::learn(self, bit);
     }
 }
