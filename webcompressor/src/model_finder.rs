@@ -1,9 +1,9 @@
-use std::io::Read;
+use std::{cell::RefCell, io::Read, rc::Rc};
 
 use crate::{
     coder::ArithmeticEncoder,
     compress_config::ModelConfig,
-    model::{LnMixerPred, Model, ModelDef},
+    model::{HashTable, LnMixerPred, Model, ModelDef, NOrderBytePredData},
     utils::U24_MAX,
 };
 use anyhow::Result;
@@ -15,115 +15,45 @@ pub struct ModelFinder {
 
 impl ModelFinder {
     pub fn new() -> Self {
-        let mut model_defs = Vec::new();
+        let mut byte_masks = Vec::new();
 
         let mut byte_mask = 0;
-        model_defs.push(ModelDef {
-            byte_mask: byte_mask,
-            weight: 1.,
-        });
+        byte_masks.push(byte_mask);
         for i in 0..8 {
             byte_mask |= 1 << i;
-            model_defs.push(ModelDef {
-                byte_mask: byte_mask,
-                weight: 1.,
-            });
+            byte_masks.push(byte_mask);
         }
 
         let mut byte_mask = 0;
         for i in 0..4 {
             byte_mask |= 1 << i;
-            model_defs.push(ModelDef {
-                byte_mask: byte_mask << 1,
-                weight: 1.,
-            });
+            byte_masks.push(byte_mask << 1);
         }
 
         let mut byte_mask = 0;
         for i in 0..4 {
             byte_mask |= 1 << i;
-            model_defs.push(ModelDef {
-                byte_mask: byte_mask << 2,
-                weight: 1.,
-            });
+            byte_masks.push(byte_mask << 2);
         }
+
+        let norder_byte_preds = byte_masks
+            .into_iter()
+            .map(|mask| ModelConfig::NOrderBytePred {
+                byte_mask: format!("0b{:08b}", mask),
+            })
+            .collect::<Vec<_>>();
 
         let model = Box::new(ModelConfig::AdaptiveProbabilityMap(Box::new(
-            ModelConfig::Mixer(vec![
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00000000".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00000001".to_string(),
-                    pow2_size: 24,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00000011".to_string(),
-                    pow2_size: 24,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00000111".to_string(),
-                    pow2_size: 24,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00001111".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00011111".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00111111".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b01111111".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b11111111".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00000010".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00000110".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00001110".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00011110".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00000100".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00001100".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00011100".to_string(),
-                    pow2_size: 23,
-                },
-                ModelConfig::NOrderBytePred {
-                    byte_mask: "0b00111100".to_string(),
-                    pow2_size: 23,
-                },
-            ]),
+            ModelConfig::Mixer(norder_byte_preds),
         )));
 
         Self {
-            model_defs: model_defs,
-            default_model: model.create_model().unwrap(),
+            model_defs: vec![],
+            default_model: model
+                .create_model(Rc::new(RefCell::new(HashTable::<NOrderBytePredData>::new(
+                    28,
+                ))))
+                .unwrap(),
         }
     }
 

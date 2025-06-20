@@ -16,36 +16,30 @@ pub struct CompressConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ModelConfig {
-    NOrderBytePred { byte_mask: String, pow2_size: u32 },
+    NOrderBytePred { byte_mask: String },
     Mixer(Vec<ModelConfig>),
     AdaptiveProbabilityMap(Box<ModelConfig>),
     Word,
 }
 
 impl ModelConfig {
-    pub fn create_model(&self) -> Result<Box<dyn Model>> {
+    pub fn create_model(
+        &self,
+        hash_table: Rc<RefCell<HashTable<NOrderBytePredData>>>,
+    ) -> Result<Box<dyn Model>> {
         Ok(match self {
-            ModelConfig::NOrderBytePred {
-                byte_mask,
-                pow2_size,
-            } => {
+            ModelConfig::NOrderBytePred { byte_mask } => {
                 let byte_mask = u8::from_str_radix(byte_mask.trim_start_matches("0b"), 2)?;
-                Box::new(NOrderBytePred::new(
-                    byte_mask,
-                    Rc::new(RefCell::new(HashTable::<NOrderBytePredData>::new(
-                        *pow2_size,
-                    ))),
-                    255,
-                ))
+                Box::new(NOrderBytePred::new(byte_mask, hash_table, 255))
             }
             ModelConfig::Mixer(model_configs) => Box::new(LnMixerPred::new(
                 model_configs
                     .iter()
-                    .map(|config| config.create_model())
+                    .map(|config| config.create_model(hash_table.clone()))
                     .collect::<Result<Vec<_>>>()?,
             )),
             ModelConfig::AdaptiveProbabilityMap(model_config) => Box::new(
-                AdaptiveProbabilityMap::new(19, model_config.create_model()?),
+                AdaptiveProbabilityMap::new(19, model_config.create_model(hash_table.clone())?),
             ),
             ModelConfig::Word => unimplemented!(),
         })
