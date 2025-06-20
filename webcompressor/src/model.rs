@@ -194,8 +194,6 @@ pub struct LnMixerPred {
     weights: Vec<Vec<Vec<f64>>>,
     prev_byte: u32,
     bit_ctx: u32,
-    word_pred: WordPred,
-    word_pred_weight: f64,
 }
 
 impl LnMixerPred {
@@ -215,8 +213,6 @@ impl LnMixerPred {
             weights: vec![vec![vec![]; 255]; 256],
             bit_ctx: 1,
             prev_byte: 0,
-            word_pred: WordPred::new(21, 255),
-            word_pred_weight: 0.9,
         }
     }
 
@@ -240,10 +236,7 @@ impl LnMixerPred {
             i += 1;
         }
 
-        let mut p_stretched = prob_stretch(self.word_pred.pred());
-        p_stretched *= self.word_pred_weight;
-
-        sum + p_stretched
+        sum
     }
 
     pub fn learn(&mut self, pred_err: f64, bit: u8) {
@@ -269,9 +262,6 @@ impl LnMixerPred {
                 weights.push(self.models_with_weight[i].weight);
             }
         }
-
-        self.word_pred_weight += 0.004 * pred_err * prob_stretch(self.word_pred.pred());
-        self.word_pred.learn(bit);
 
         self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
 
@@ -488,7 +478,7 @@ impl WordPred {
                 self.current_word = 2166136261;
             }
 
-            self.ctx = self.current_word.wrapping_mul(3);
+            self.ctx = self.current_word;
 
             // Reset bit_ctx
             self.bit_ctx = 1;

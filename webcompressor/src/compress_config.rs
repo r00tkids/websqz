@@ -3,9 +3,12 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::model::{
-    AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, ModelDef, NOrderBytePred,
-    NOrderBytePredData,
+use crate::{
+    js_code_generator::generate_js_code,
+    model::{
+        AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, ModelDef, NOrderBytePred,
+        NOrderBytePredData, WordPred,
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +44,11 @@ impl ModelConfig {
             ModelConfig::AdaptiveProbabilityMap(model_config) => Box::new(
                 AdaptiveProbabilityMap::new(19, model_config.create_model(hash_table.clone())?),
             ),
-            ModelConfig::Word => unimplemented!(),
+            ModelConfig::Word => Box::new(WordPred::new(21, 255)),
         })
+    }
+
+    pub fn generate_js_code(&self) -> String {
+        generate_js_code(self)
     }
 }

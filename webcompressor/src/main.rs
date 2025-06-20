@@ -8,6 +8,7 @@ mod bwt;
 mod coder;
 mod compress_config;
 mod compressor;
+mod js_code_generator;
 mod model;
 mod model_finder;
 mod stats;
