@@ -4,10 +4,10 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    js_code_generator::generate_js_code,
+    js_code_generator::{generate_js_code, ModelRef},
     model::{
-        AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, ModelDef, NOrderBytePred,
-        NOrderBytePredData, WordPred,
+        AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, ModelDef, NOrderByte,
+        NOrderByteData, WordPred,
     },
 };
 
@@ -19,7 +19,7 @@ pub struct CompressConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ModelConfig {
-    NOrderBytePred { byte_mask: String },
+    NOrderByte { byte_mask: String },
     Mixer(Vec<ModelConfig>),
     AdaptiveProbabilityMap(Box<ModelConfig>),
     Word,
@@ -28,12 +28,12 @@ pub enum ModelConfig {
 impl ModelConfig {
     pub fn create_model(
         &self,
-        hash_table: Rc<RefCell<HashTable<NOrderBytePredData>>>,
+        hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
     ) -> Result<Box<dyn Model>> {
         Ok(match self {
-            ModelConfig::NOrderBytePred { byte_mask } => {
+            ModelConfig::NOrderByte { byte_mask } => {
                 let byte_mask = u8::from_str_radix(byte_mask.trim_start_matches("0b"), 2)?;
-                Box::new(NOrderBytePred::new(byte_mask, hash_table, 255))
+                Box::new(NOrderByte::new(byte_mask, hash_table, 255))
             }
             ModelConfig::Mixer(model_configs) => Box::new(LnMixerPred::new(
                 model_configs
@@ -49,6 +49,7 @@ impl ModelConfig {
     }
 
     pub fn generate_js_code(&self) -> String {
-        generate_js_code(self)
+        let mut features_used = ModelRef::None;
+        generate_js_code(self, &mut features_used)
     }
 }

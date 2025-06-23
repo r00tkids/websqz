@@ -1,6 +1,6 @@
 {
     "model": {
-        "type": "NOrderBytePred",
+        "type": "NOrderByte",
         "byte_mask": "0b00000001",
         "pow2_size": 20
     }

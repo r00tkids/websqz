@@ -3,7 +3,7 @@ use std::{cell::RefCell, io::Read, rc::Rc};
 use crate::{
     coder::ArithmeticEncoder,
     compress_config::ModelConfig,
-    model::{HashTable, LnMixerPred, Model, ModelDef, NOrderBytePredData},
+    model::{HashTable, LnMixerPred, Model, ModelDef, NOrderByteData},
     utils::U24_MAX,
 };
 use anyhow::Result;
@@ -38,7 +38,7 @@ impl ModelFinder {
 
         let mut mixed_models = byte_masks
             .into_iter()
-            .map(|mask| ModelConfig::NOrderBytePred {
+            .map(|mask| ModelConfig::NOrderByte {
                 byte_mask: format!("0b{:08b}", mask),
             })
             .collect::<Vec<_>>();
@@ -54,9 +54,7 @@ impl ModelFinder {
         Self {
             model_defs: vec![],
             default_model: model
-                .create_model(Rc::new(RefCell::new(HashTable::<NOrderBytePredData>::new(
-                    28,
-                ))))
+                .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(28))))
                 .unwrap(),
         }
     }

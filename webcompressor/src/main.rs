@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fs::File, io::Read, rc::Rc};
 
 use compress_config::{CompressConfig, ModelConfig};
-use model::{HashTable, NOrderBytePredData};
+use model::{HashTable, NOrderByteData};
 use model_finder::ModelFinder;
 
 mod bwt;
@@ -22,9 +22,7 @@ fn main() {
 
     let model = model_config
         .model
-        .create_model(Rc::new(RefCell::new(HashTable::<NOrderBytePredData>::new(
-            27,
-        ))))
+        .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(27))))
         .expect("Failed to create model from config");
 
     let mut test_data = String::new();

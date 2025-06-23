@@ -3,14 +3,10 @@ use std::{
     io::{Read, Write},
 };
 
+use crate::coder::{ArithmeticDecoder, ArithmeticEncoder};
 use crate::{
-    bwt::{bwt, bwt_optimized},
     model::Model,
     utils::{prob_squash, U24_MAX},
-};
-use crate::{
-    coder::{ArithmeticDecoder, ArithmeticEncoder},
-    model::LnMixerPred,
 };
 use anyhow::Result;
 
@@ -116,9 +112,7 @@ impl<R: Read> Decoder<R> {
 mod tests {
     use std::{fs::File, io::Read};
 
-    use crate::coder::{ArithmeticDecoder, ArithmeticEncoder};
     use crate::compressor::{Decoder, Encoder};
-    use crate::model::{AdaptiveProbabilityMap, LnMixerPred};
     use crate::model_finder::ModelFinder;
 
     #[test]

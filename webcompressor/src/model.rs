@@ -7,16 +7,16 @@ use std::{
 };
 
 #[derive(Clone, Copy)]
-pub struct NOrderBytePredData(u32);
+pub struct NOrderByteData(u32);
 
-impl Default for NOrderBytePredData {
+impl Default for NOrderByteData {
     fn default() -> Self {
         // Start with half probability
         Self(U24_MAX >> 1)
     }
 }
 
-impl NOrderBytePredData {
+impl NOrderByteData {
     fn count(&self) -> u32 {
         (self.0 & 0xFF000000) >> 24
     }
@@ -39,8 +39,8 @@ pub struct HashTable<Record> {
     hash_mask: usize,
 }
 
-fn hash(mut value: u32, shift: u32) -> u32 {
-    const K_MUL: u32 = 0x1e35a7bd;
+fn hash(mut value: u32, mut shift: u32) -> u32 {
+    const K_MUL: u32 = 0x9E35A7BD;
     value ^= value >> shift;
     K_MUL.wrapping_mul(value) >> shift
 }
@@ -58,7 +58,7 @@ where
 
         Self {
             table: vec![Record::default(); context_size],
-            hash_mask: (1 << pow2_size) - 1,
+            hash_mask: context_size - 1,
         }
     }
 
@@ -76,26 +76,26 @@ where
 }
 
 #[derive(Clone, Copy)]
-pub struct NOrderBytePredDataRec([NOrderBytePredData; 255]);
-impl Default for NOrderBytePredDataRec {
+pub struct NOrderByteDataRec([NOrderByteData; 255]);
+impl Default for NOrderByteDataRec {
     fn default() -> Self {
-        Self([NOrderBytePredData::default(); 255])
+        Self([NOrderByteData::default(); 255])
     }
 }
 
-impl NOrderBytePredDataRec {
-    fn get(&self, bit_ctx: u32) -> &NOrderBytePredData {
+impl NOrderByteDataRec {
+    fn get(&self, bit_ctx: u32) -> &NOrderByteData {
         &self.0[bit_ctx as usize - 1]
     }
 
-    fn get_mut(&mut self, bit_ctx: u32) -> &mut NOrderBytePredData {
+    fn get_mut(&mut self, bit_ctx: u32) -> &mut NOrderByteData {
         &mut self.0[bit_ctx as usize - 1]
     }
 }
 
-pub struct NOrderBytePred {
+pub struct NOrderByte {
     ctx: u32,
-    hash_table: Rc<RefCell<HashTable<NOrderBytePredData>>>,
+    hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
     max_count: u32,
 
     magic_num: u32,
@@ -105,10 +105,10 @@ pub struct NOrderBytePred {
     bit_ctx: u32,
 }
 
-impl NOrderBytePred {
+impl NOrderByte {
     pub fn new(
         byte_mask: u8,
-        hash_table: Rc<RefCell<HashTable<NOrderBytePredData>>>,
+        hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
         max_count: u32,
     ) -> Self {
         assert!(max_count <= 255);
@@ -121,7 +121,7 @@ impl NOrderBytePred {
         Self {
             ctx: 0,
             bit_ctx: 1,
-            magic_num: hash(byte_mask as u32, 2).wrapping_mul(3),
+            magic_num: hash(byte_mask as u32, 2),
             max_count: max_count,
             hash_table: hash_table,
             prev_bytes: 0,
@@ -152,9 +152,9 @@ impl NOrderBytePred {
                 count += 1;
             }
 
+            let count_pow = (count as f64).powf(0.72) + 0.19;
             // Learning function
-            prob += (U24_MAX as f64
-                * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / (count as f64 + 0.1)))
+            prob += (U24_MAX as f64 * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / count_pow))
                 as i32;
             inst.set_count(count);
             inst.set_prob(prob);
@@ -162,13 +162,13 @@ impl NOrderBytePred {
 
         self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
         if self.bit_ctx >= 256 {
-            self.bit_ctx &= 0xff;
+            let current_byte = self.bit_ctx & 0xff;
 
-            self.prev_bytes = ((self.prev_bytes << 8) | self.bit_ctx as u64) & self.mask;
-            // Remove the extra leading bit before using it in the ctx
-            self.ctx = (hash((self.prev_bytes >> 32) as u32, 3)
+            self.prev_bytes = (self.prev_bytes << 8) | current_byte as u64;
+            let masked_prev_bytes = self.prev_bytes & self.mask;
+            self.ctx = (hash((masked_prev_bytes >> 32) as u32, 3)
                 .wrapping_mul(9)
-                .wrapping_add(hash(self.prev_bytes as u32, 3)))
+                .wrapping_add(hash(masked_prev_bytes as u32, 3)))
             .wrapping_mul(self.magic_num);
 
             // Reset bit_ctx
@@ -274,10 +274,10 @@ impl LnMixerPred {
 }
 
 #[derive(Clone, Default)]
-pub struct SSEPredData([NOrderBytePredData; 32]);
+pub struct SSEPredData([NOrderByteData; 32]);
 
 impl Index<usize> for SSEPredData {
-    type Output = NOrderBytePredData;
+    type Output = NOrderByteData;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.0[index]
@@ -354,7 +354,7 @@ impl AdaptiveProbabilityMap {
         }
 
         let counter1 = {
-            let counter1: &mut NOrderBytePredData =
+            let counter1: &mut NOrderByteData =
                 &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)[self.current_prob_idx];
             if counter1.count() == 0 {
                 let prob = (prob_squash(p) * U24_MAX as f64) as i32 & U24_MAX as i32;
@@ -364,7 +364,7 @@ impl AdaptiveProbabilityMap {
         };
 
         let counter2 = {
-            let counter2: &mut NOrderBytePredData =
+            let counter2: &mut NOrderByteData =
                 &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)[next_idx];
             if counter2.count() == 0 {
                 let prob = (prob_squash(p) * U24_MAX as f64) as i32 & U24_MAX as i32;
@@ -416,7 +416,7 @@ impl AdaptiveProbabilityMap {
 
 pub struct WordPred {
     ctx: u32,
-    hash_table: HashTable<NOrderBytePredData>,
+    hash_table: HashTable<NOrderByteData>,
     max_count: u32,
 
     current_word: u32,
@@ -491,13 +491,13 @@ pub trait Model {
     fn learn(&mut self, pred_err: f64, bit: u8);
 }
 
-impl Model for NOrderBytePred {
+impl Model for NOrderByte {
     fn pred(&mut self) -> f64 {
-        NOrderBytePred::pred(self).unwrap_or(0.5)
+        NOrderByte::pred(self).unwrap_or(0.5)
     }
 
     fn learn(&mut self, pred_err: f64, bit: u8) {
-        NOrderBytePred::learn(self, bit);
+        NOrderByte::learn(self, bit);
     }
 }
 
