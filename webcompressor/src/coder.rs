@@ -28,7 +28,10 @@ impl<W: Write> ArithmeticEncoder<W> {
         assert!(self.high > self.low);
 
         // mid = low + ((high - low) * p) / (p_max + 1)
-        let mid = self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;
+        let p_f = p as f64 / U24_MAX as f64;
+        let mid = self.low + ((self.high - self.low) as f64 * p_f) as u32;
+        /*
+        self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;*/
 
         // Below or equal to mid is the interval for bit = 1, and above mid is the inverval for bit = 0
         assert!(self.high > mid && mid >= self.low);
@@ -93,7 +96,8 @@ impl<R: Read> ArithmeticDecoder<R> {
         assert!(p <= U24_MAX);
         assert!(self.high > self.low);
 
-        let mid = self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;
+        let p_f = p as f64 / U24_MAX as f64;
+        let mid = self.low + ((self.high - self.low) as f64 * p_f) as u32;
 
         assert!(self.high > mid && mid >= self.low);
         let mut bit = 0;

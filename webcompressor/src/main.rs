@@ -1,16 +1,24 @@
-use std::{cell::RefCell, fs::File, io::Read, rc::Rc};
+use std::{
+    cell::RefCell,
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+    rc::Rc,
+};
 
 use compress_config::{CompressConfig, ModelConfig};
+use compressor::Encoder;
 use model::{HashTable, NOrderByteData};
 use model_finder::ModelFinder;
+use output_generator::render_output;
 
 mod bwt;
 mod coder;
 mod compress_config;
 mod compressor;
-mod js_code_generator;
 mod model;
 mod model_finder;
+mod output_generator;
 mod stats;
 mod utils;
 
@@ -32,5 +40,19 @@ fn main() {
         .unwrap();
 
     let test_bytes = test_data.as_bytes();
-    stats::StatsGenerator::gather_and_dump(test_bytes, model).unwrap();
+
+    let encoded_data: Vec<u8> = Vec::new();
+    let mut encoder = Encoder::new(model, encoded_data).unwrap();
+    let encoded_data = encoder.encode_bytes(test_bytes).unwrap();
+
+    render_output(
+        Path::new("out"),
+        output_generator::Target::Node,
+        &model_config.model,
+        test_bytes.len(),
+        encoded_data,
+    );
+
+    // TODO: Uncomment the following lines to enable stats gathering
+    // stats::StatsGenerator::gather_and_dump(test_bytes, model).unwrap();
 }

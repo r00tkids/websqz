@@ -4,11 +4,11 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    js_code_generator::{generate_js_code, ModelRef},
     model::{
         AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, ModelDef, NOrderByte,
         NOrderByteData, WordPred,
     },
+    output_generator::{generate_js_decompression_code, ModelRef},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +50,6 @@ impl ModelConfig {
 
     pub fn generate_js_code(&self) -> String {
         let mut features_used = ModelRef::None;
-        generate_js_code(self, &mut features_used)
+        generate_js_decompression_code(self, &mut features_used)
     }
 }

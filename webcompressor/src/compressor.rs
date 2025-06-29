@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::Result;
 
-struct Encoder<W: Write> {
+pub struct Encoder<W: Write> {
     coder: ArithmeticEncoder<W>,
     model: Box<dyn Model>,
 }
@@ -65,7 +65,7 @@ impl<W: Write> Encoder<W> {
     }
 }
 
-struct Decoder<R: Read> {
+pub struct Decoder<R: Read> {
     coder: ArithmeticDecoder<R>,
     model: Box<dyn Model>,
 }

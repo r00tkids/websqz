@@ -129,17 +129,14 @@ impl NOrderByte {
         }
     }
 
-    pub fn pred(&self) -> Option<f64> {
+    pub fn pred(&self) -> f64 {
         let entry = self
             .hash_table
             .borrow()
             .get(self.ctx ^ self.bit_ctx)
             .clone();
-        if entry.count() == 0 {
-            return None;
-        }
 
-        Some(entry.prob() as f64 / U24_MAX as f64)
+        entry.prob() as f64 / U24_MAX as f64
     }
 
     pub fn learn(&mut self, bit: u8) {
@@ -493,7 +490,7 @@ pub trait Model {
 
 impl Model for NOrderByte {
     fn pred(&mut self) -> f64 {
-        NOrderByte::pred(self).unwrap_or(0.5)
+        NOrderByte::pred(self)
     }
 
     fn learn(&mut self, pred_err: f64, bit: u8) {
