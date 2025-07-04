@@ -93,6 +93,8 @@ impl NOrderByteDataRec {
     }
 }
 
+/// NOrderByte model for byte predictions
+/// Can describe [0, 8] order models and partial models
 pub struct NOrderByte {
     ctx: u32,
     hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
@@ -136,7 +138,7 @@ impl NOrderByte {
             .get(self.ctx ^ self.bit_ctx)
             .clone();
 
-        entry.prob() as f64 / U24_MAX as f64
+        prob_stretch(entry.prob() as f64 / (U24_MAX + 1) as f64)
     }
 
     pub fn learn(&mut self, bit: u8) {
@@ -226,7 +228,7 @@ impl LnMixerPred {
             };
 
             let p = model.model.pred();
-            let p_stretched = prob_stretch(p);
+            let p_stretched = p;
             self.last_stretched_p[i] = Some(p_stretched);
             sum += model_weight * p_stretched;
 
@@ -438,7 +440,7 @@ impl WordPred {
 
     pub fn pred(&self) -> f64 {
         let entry = self.hash_table.get(self.ctx ^ self.bit_ctx).clone();
-        entry.prob() as f64 / U24_MAX as f64
+        prob_stretch(entry.prob() as f64 / (1 + U24_MAX) as f64)
     }
 
     pub fn learn(&mut self, bit: u8) {

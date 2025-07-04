@@ -19,7 +19,7 @@ let HashMap = (pow2Size, itemSize, defaultValue, itemEncoder, itemDecoder) => {
 }
 
 function hash(value, shift) {
-    const K_MUL = 0x9E35A7BD;
-    value ^= value >>> shift;
-    return (K_MUL * value) >>> shift;
+    const K_MUL = 0x9E35A7BDn;
+    value ^= value >> BigInt(shift);
+    return ((K_MUL * value) & 0xffffffffn) >> BigInt(shift);
 }

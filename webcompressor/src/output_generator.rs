@@ -28,7 +28,8 @@ pub fn generate_js_decompression_code(
     features_used: &mut ModelRef,
 ) -> String {
     let mut static_src: String = "".to_owned();
-    let out_src = match model_config {
+    let mut out_src = "let model = ".to_owned();
+    out_src += &match model_config {
         ModelConfig::NOrderByte { byte_mask } => {
             *features_used |= ModelRef::NOrderByte;
             *features_used |= ModelRef::HashTable;
@@ -53,8 +54,11 @@ pub fn generate_js_decompression_code(
         }
     };
 
+    out_src += ";\n";
+
     static_src += include_str!("js_source/hash_map.js");
     static_src += include_str!("js_source/coder.js");
+    static_src += include_str!("js_source/utils.js");
 
     if features_used.contains(ModelRef::NOrderByte) {
         static_src += include_str!("js_source/norder_byte.js");

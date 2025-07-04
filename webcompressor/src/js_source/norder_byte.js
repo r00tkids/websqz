@@ -1,6 +1,7 @@
 let U24Max = 0xffffff;
+let U64Max = 0xffffffffffffn;
 
-let NOrderByteHashMap = HashMap(28, 4, { prob: U24Max >>> 1, count: 0 }, (view, value) => {
+let NOrderByteHashMap = HashMap(10/*28*/, 4, { prob: U24Max >>> 1, count: 0 }, (view, value) => {
     view.setUint32(0, value.prob & U24Max | (value.count << 24));
 }, (view) => {
     return {
@@ -14,9 +15,12 @@ let NOrderByte = (byteMask) => {
     let maxCount = 255;
     let bitMaskLow = 0;
     let bitMaskHigh = 0;
+    let bitMask = 0n;
     let bitCtx = 1;
+    let prevBytes = 0n;
     let prevBytesLow = 0;
     let prevBytesHigh = 0;
+    let magicNum = hash(BigInt(byteMask), 2);
     for (let i = 0; i < 4; i++) {
         bitMaskLow |= ((byteMask >>> i) & 1) * (0xff << (i * 8));
     }
@@ -24,9 +28,13 @@ let NOrderByte = (byteMask) => {
         bitMaskHigh |= ((byteMask >>> i) & 1) * (0xff << ((i-4) * 8));
     }
 
+    for (let i = 0; i < 8; i++) {
+        bitMask |= BigInt(((byteMask >>> i) & 1) * (0xff << (i * 8)));
+    }
+
     return {
         pred: () => {
-            return NOrderByteHashMap.get(ctx ^ bitCtx).prob / U24Max;
+            return probStretch(NOrderByteHashMap.get(ctx ^ bitCtx).prob / (1 + U24Max));
         },
         learn: (bit) => {
             let value = NOrderByteHashMap.get(ctx ^ bitCtx);
@@ -34,20 +42,23 @@ let NOrderByte = (byteMask) => {
                 value.count++;
             }
             let countPow = Math.pow(value.count, 0.72) + 0.19;
-            value.prob += U24Max * ((bit - (value.prob / U24Max)) / countPow);
+            value.prob += (U24Max * ((bit - (value.prob / U24Max)) / countPow)) >> 0;
             NOrderByteHashMap.set(ctx ^ bitCtx, value);
 
             bitCtx = (bitCtx << 1) | bit;
             if (bitCtx >= 256) {
                 let currentByte = bitCtx & 0xff;
-                bitCtx &= byteMask;
 
                 prevBytesHigh = (prevBytesHigh << 8) | (prevBytesLow >>> 24);
                 prevBytesLow = (prevBytesLow << 8) | currentByte;
 
+                prevBytes = ((prevBytes << 8n) | BigInt(currentByte)) & U64Max;
+
                 let maskedByteLow = prevBytesLow & bitMaskLow;
                 let maskedByteHigh = prevBytesHigh & bitMaskHigh;
-                ctx = (hash(maskedByteHigh, 3) * 9 + hash(maskedByteLow, 3)) * magicNum;
+
+                let maskedBytes = prevBytes & bitMask;
+                ctx = Number(((hash(maskedBytes >> 32n, 3) * 9n + hash(maskedBytes, 3)) * magicNum) & 0x7fffffffn);
 
                 bitCtx = 1;
             }

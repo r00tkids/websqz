@@ -21,15 +21,13 @@ impl<W: Write> ArithmeticEncoder<W> {
         })
     }
 
-    pub fn encode(&mut self, bit: u8, p: u32) -> Result<()> {
+    pub fn encode(&mut self, bit: u8, p: f64) -> Result<()> {
         // p is P(1) and has 24 bit precision
-        assert!(p <= U24_MAX);
+        assert!(p >= 0. && p < 1.);
         assert!(bit == 0 || bit == 1);
         assert!(self.high > self.low);
 
-        // mid = low + ((high - low) * p) / (p_max + 1)
-        let p_f = p as f64 / U24_MAX as f64;
-        let mid = self.low + ((self.high - self.low) as f64 * p_f) as u32;
+        let mid = self.low + ((self.high - self.low) as f64 * p) as u32;
         /*
         self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;*/
 
@@ -92,12 +90,11 @@ impl<R: Read> ArithmeticDecoder<R> {
         })
     }
 
-    pub fn decode(&mut self, p: u32) -> Result<u8> {
-        assert!(p <= U24_MAX);
+    pub fn decode(&mut self, p: f64) -> Result<u8> {
+        assert!(p >= 0. && p < 1.);
         assert!(self.high > self.low);
 
-        let p_f = p as f64 / U24_MAX as f64;
-        let mid = self.low + ((self.high - self.low) as f64 * p_f) as u32;
+        let mid = self.low + ((self.high - self.low) as f64 * p) as u32;
 
         assert!(self.high > mid && mid >= self.low);
         let mut bit = 0;
@@ -138,7 +135,7 @@ mod tests {
             for b in hello_bytes {
                 for i in 0..8 {
                     let bit = (b >> i) & 1;
-                    encoder.encode(bit, 0x7FFFFF).unwrap();
+                    encoder.encode(bit, 0.5).unwrap();
                 }
             }
             encoder.finish().unwrap()
@@ -149,7 +146,7 @@ mod tests {
         let mut decode_buf = vec![0; hello_bytes.len()];
         for i in 0..(hello_bytes.len()) {
             for bit in 0..8 {
-                let r = decoder.decode(0x7FFFFF).unwrap();
+                let r = decoder.decode(0.5).unwrap();
                 decode_buf[i] |= r << bit;
             }
         }
@@ -167,7 +164,7 @@ mod tests {
             for b in bytes {
                 for i in 0..8 {
                     let bit = (b >> i) & 1;
-                    encoder.encode(bit, 0xffffff).unwrap();
+                    encoder.encode(bit, 1e-8).unwrap();
                 }
             }
             encoder.finish().unwrap()
@@ -178,7 +175,7 @@ mod tests {
         let mut decode_buf = vec![0; bytes.len()];
         for i in 0..(bytes.len()) {
             for bit in 0..8 {
-                let r = decoder.decode(0xffffff).unwrap();
+                let r = decoder.decode(1e-8).unwrap();
                 decode_buf[i] |= r << bit;
             }
         }

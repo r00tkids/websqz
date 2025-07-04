@@ -39,9 +39,8 @@ impl<W: Write> Encoder<W> {
             let b = bytes[b_idx];
             for i in 0..8 {
                 let prob = prob_squash(self.model.pred());
-                let int_24_prob = (prob * U24_MAX as f64) as u32;
                 let bit = (b >> (7 - i)) & 1;
-                self.coder.encode(bit, int_24_prob)?;
+                self.coder.encode(bit, prob)?;
                 self.model.learn(bit as f64 - prob, bit);
             }
 
@@ -83,10 +82,9 @@ impl<R: Read> Decoder<R> {
         for byte_idx in 0..size {
             for i in 0..8 {
                 let prob = prob_squash(self.model.pred());
-                let int_24_prob = (prob * U24_MAX as f64) as u32;
-                let bit = self.coder.decode(int_24_prob)?;
+                let bit = self.coder.decode(prob)?;
                 self.model.learn(bit as f64 - prob, bit);
-                res[byte_idx] |= bit << (7 - i);
+                res[byte_idx] = (res[byte_idx] << 1) | bit;
             }
         }
 
