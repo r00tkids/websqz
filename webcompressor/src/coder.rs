@@ -22,22 +22,23 @@ impl<W: Write> ArithmeticEncoder<W> {
     }
 
     pub fn encode(&mut self, bit: u8, p: f64) -> Result<()> {
-        // p is P(1) and has 24 bit precision
-        assert!(p >= 0. && p < 1.);
+        // p is the predicted probability of the bit being 1
+        assert!(p >= 0.);
         assert!(bit == 0 || bit == 1);
         assert!(self.high > self.low);
 
-        let mid = self.low + ((self.high - self.low) as f64 * p) as u32;
-        /*
-        self.low + (((self.high - self.low) as u64 * p as u64) >> 24) as u32;*/
+        let mut mid = self.low + ((self.high - self.low) as f64 * p) as u32;
+        if mid >= self.high {
+            mid = self.high - 1;
+        }
 
         // Below or equal to mid is the interval for bit = 1, and above mid is the inverval for bit = 0
         assert!(self.high > mid && mid >= self.low);
         if bit == 1 {
-            // Set the subinterval to low -> mid
+            // Set the subinterval to [low, mid>
             self.high = mid;
         } else {
-            // Set the subinterval to (mid + 1) -> high
+            // Set the subinterval to [mid + 1, high>
             self.low = mid + 1;
         }
 
@@ -91,10 +92,14 @@ impl<R: Read> ArithmeticDecoder<R> {
     }
 
     pub fn decode(&mut self, p: f64) -> Result<u8> {
-        assert!(p >= 0. && p < 1.);
+        assert!(p >= 0.);
         assert!(self.high > self.low);
 
-        let mid = self.low + ((self.high - self.low) as f64 * p) as u32;
+        let mut mid = self.low + ((self.high - self.low) as f64 * p) as u32;
+
+        if mid >= self.high {
+            mid = self.high - 1;
+        }
 
         assert!(self.high > mid && mid >= self.low);
         let mut bit = 0;
@@ -105,7 +110,7 @@ impl<R: Read> ArithmeticDecoder<R> {
             self.low = mid + 1;
         }
 
-        while (self.high ^ self.low) < 0x1000000 {
+        while (self.high ^ self.low) < (1 << 24) {
             self.low <<= 8;
             self.high = self.high << 8 | 255;
             let mut c = [0u8];
@@ -164,7 +169,7 @@ mod tests {
             for b in bytes {
                 for i in 0..8 {
                     let bit = (b >> i) & 1;
-                    encoder.encode(bit, 1e-8).unwrap();
+                    encoder.encode(bit, 1.).unwrap();
                 }
             }
             encoder.finish().unwrap()
@@ -175,7 +180,7 @@ mod tests {
         let mut decode_buf = vec![0; bytes.len()];
         for i in 0..(bytes.len()) {
             for bit in 0..8 {
-                let r = decoder.decode(1e-8).unwrap();
+                let r = decoder.decode(1.).unwrap();
                 decode_buf[i] |= r << bit;
             }
         }

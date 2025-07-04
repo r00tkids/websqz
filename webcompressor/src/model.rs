@@ -138,7 +138,7 @@ impl NOrderByte {
             .get(self.ctx ^ self.bit_ctx)
             .clone();
 
-        prob_stretch(entry.prob() as f64 / (U24_MAX + 1) as f64)
+        prob_stretch(entry.prob() as f64 / U24_MAX as f64)
     }
 
     pub fn learn(&mut self, bit: u8) {
@@ -440,7 +440,7 @@ impl WordPred {
 
     pub fn pred(&self) -> f64 {
         let entry = self.hash_table.get(self.ctx ^ self.bit_ctx).clone();
-        prob_stretch(entry.prob() as f64 / (1 + U24_MAX) as f64)
+        prob_stretch(entry.prob() as f64 / U24_MAX as f64)
     }
 
     pub fn learn(&mut self, bit: u8) {

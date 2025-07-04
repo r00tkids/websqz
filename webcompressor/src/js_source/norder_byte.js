@@ -24,7 +24,7 @@ let NOrderByte = (byteMask) => {
 
     return {
         pred: () => {
-            return probStretch(NOrderByteHashMap.get(ctx ^ bitCtx).prob / (1 + U24Max));
+            return probStretch(NOrderByteHashMap.get(ctx ^ bitCtx).prob / U24Max);
         },
         learn: (bit) => {
             let value = NOrderByteHashMap.get(ctx ^ bitCtx);
@@ -32,7 +32,7 @@ let NOrderByte = (byteMask) => {
                 value.count++;
             }
             let countPow = Math.pow(value.count, 0.72) + 0.19;
-            value.prob += (U24Max * ((bit - (value.prob / U24Max)) / countPow)) >> 0;
+            value.prob += (U24Max * ((bit - (value.prob / U24Max)) / countPow)) | 0;
             NOrderByteHashMap.set(ctx ^ bitCtx, value);
 
             bitCtx = (bitCtx << 1) | bit;

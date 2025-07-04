@@ -1,25 +1,27 @@
-let U24_MAX = 0xFFFFFF;
-let U32_MAX = 0xFFFFFFFFn;
-
 let ArithmeticDecoder = (input, offset) => {
     let self = {
-        state: 0n,
-        low: 0n,
-        high: 0xFFFFFFFFn,
+        state: 0,
+        low: 0,
+        high: 0xFFFFFFFF,
         readPtr: offset,
     };
 
     for (let i = 0;i < 4;++i) {
-        let c = BigInt(self.readPtr >= input.byteLength ? 0 : input[self.readPtr++]);
-        self.state = (self.state << 8n) | c;
+        let c = self.readPtr >= input.byteLength ? 0 : input[self.readPtr++];
+        self.state = ((self.state << 8) | c) >>> 0;
     }
 
     return {
         decode: (p) => {
-            if (p > U24_MAX) throw new Error("p > U24_MAX");
+            if (p < 0. && p >= 1.) throw new Error("probability out of range");
             if (self.high <= self.low) throw new Error("high <= low");
 
-            let mid = BigInt((Number(self.low) + (Number(self.high - self.low) * p)) >>> 0);
+            let mid = (self.low + (self.high - self.low) * p) >>> 0;
+            if (mid >= self.high) {
+                // We loose some precision to prevent overflow
+                // Unlikely to happen in practice
+                mid = self.high - 1;
+            }
 
             if (!(self.high > mid && mid >= self.low)) throw new Error("mid out of range");
 
@@ -28,14 +30,14 @@ let ArithmeticDecoder = (input, offset) => {
                 bit = 1;
                 self.high = mid;
             } else {
-                self.low = (mid + 1n) & U32_MAX;
+                self.low = (mid + 1) >>> 0;
             }
 
-            while ((self.high ^ self.low) < 0x1000000n) {
-                self.low = (self.low << 8n) & U32_MAX;
-                self.high = ((self.high << 8n) | 0xFFn) & U32_MAX;
-                let c = BigInt(self.readPtr >= input.byteLength ? 0 : input[self.readPtr++]);    
-                self.state = ((self.state << 8n) | c) & U32_MAX;
+            while (((self.high ^ self.low) >>> 0) < (1 << 24)) {
+                self.low = (self.low << 8) >>> 0;
+                self.high = ((self.high << 8) | 0xFF) >>> 0;
+                let c = self.readPtr >= input.byteLength ? 0 : input[self.readPtr++];    
+                self.state = ((self.state << 8) | c) >>> 0;
             }
 
             return bit;
