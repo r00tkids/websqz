@@ -30,7 +30,7 @@ fn main() {
 
     let model = model_config
         .model
-        .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(4))))
+        .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(10))))
         .expect("Failed to create model from config");
 
     let mut test_data = String::new();
