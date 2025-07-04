@@ -13,20 +13,10 @@ let NOrderByteHashMap = HashMap(10/*28*/, 4, { prob: U24Max >>> 1, count: 0 }, (
 let NOrderByte = (byteMask) => {
     let ctx = 0;
     let maxCount = 255;
-    let bitMaskLow = 0;
-    let bitMaskHigh = 0;
     let bitMask = 0n;
     let bitCtx = 1;
     let prevBytes = 0n;
-    let prevBytesLow = 0;
-    let prevBytesHigh = 0;
     let magicNum = hash(BigInt(byteMask), 2);
-    for (let i = 0; i < 4; i++) {
-        bitMaskLow |= ((byteMask >>> i) & 1) * (0xff << (i * 8));
-    }
-    for (let i = 4; i < 8; i++) {
-        bitMaskHigh |= ((byteMask >>> i) & 1) * (0xff << ((i-4) * 8));
-    }
 
     for (let i = 0; i < 8; i++) {
         bitMask |= BigInt(((byteMask >>> i) & 1) * (0xff << (i * 8)));
@@ -49,13 +39,7 @@ let NOrderByte = (byteMask) => {
             if (bitCtx >= 256) {
                 let currentByte = bitCtx & 0xff;
 
-                prevBytesHigh = (prevBytesHigh << 8) | (prevBytesLow >>> 24);
-                prevBytesLow = (prevBytesLow << 8) | currentByte;
-
                 prevBytes = ((prevBytes << 8n) | BigInt(currentByte)) & U64Max;
-
-                let maskedByteLow = prevBytesLow & bitMaskLow;
-                let maskedByteHigh = prevBytesHigh & bitMaskHigh;
 
                 let maskedBytes = prevBytes & bitMask;
                 ctx = Number(((hash(maskedBytes >> 32n, 3) * 9n + hash(maskedBytes, 3)) * magicNum) & 0x7fffffffn);
