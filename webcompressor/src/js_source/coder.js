@@ -59,7 +59,6 @@ let decompress = (model, data) => {
             model.learn(bit, bit - prob);
             byte = (byte << 1) | bit;
         }
-
         output.push(byte);
 
         if (byteIdx % 1024*10 === 0) {
