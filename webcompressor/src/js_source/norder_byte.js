@@ -24,7 +24,7 @@ let NOrderByte = (byteMask) => {
 
     return {
         pred: () => {
-            return probStretch(NOrderByteHashMap.get(ctx ^ bitCtx).prob / (U24Max + 1));
+            return probStretch(NOrderByteHashMap.get(ctx ^ bitCtx).prob / U24Max);
         },
         learn: (bit) => {
             let value = NOrderByteHashMap.get(ctx ^ bitCtx);

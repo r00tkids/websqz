@@ -27,8 +27,11 @@ impl<W: Write> ArithmeticEncoder<W> {
         assert!(bit == 0 || bit == 1);
         assert!(self.high > self.low);
 
-        let mut mid = self.low + ((self.high - self.low) as f64 * p) as u32;
+        let range = (self.high - self.low) as f64;
+        let mut mid = range.mul_add(p, self.low as f64) as u32;
         if mid >= self.high {
+            // We loose some precision to prevent overflow
+            // But it's unlikely to happen in practice (p >= 1.0)
             mid = self.high - 1;
         }
 
