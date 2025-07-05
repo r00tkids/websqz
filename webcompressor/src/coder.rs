@@ -98,7 +98,8 @@ impl<R: Read> ArithmeticDecoder<R> {
         assert!(p >= 0.);
         assert!(self.high > self.low);
 
-        let mut mid = self.low + ((self.high - self.low) as f64 * p) as u32;
+        let range = (self.high - self.low) as f64;
+        let mut mid = range.mul_add(p, self.low as f64) as u32;
 
         if mid >= self.high {
             mid = self.high - 1;
