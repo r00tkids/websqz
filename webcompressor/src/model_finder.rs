@@ -42,13 +42,11 @@ impl ModelFinder {
 
         mixed_models.push(ModelConfig::Word);
 
-        let model = Box::new(ModelConfig::AdaptiveProbabilityMap(Box::new(
-            ModelConfig::Mixer(mixed_models.clone()),
-        )));
+        let model2 = Box::new(ModelConfig::Mixer(mixed_models.clone()));
 
         Self {
             model_defs: vec![],
-            default_model: model
+            default_model: model2
                 .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(28))))
                 .unwrap(),
         }

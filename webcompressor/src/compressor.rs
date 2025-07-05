@@ -35,7 +35,7 @@ impl<W: Write> Encoder<W> {
                 let prob = prob_squash(self.model.pred());
                 let bit = (b >> (7 - i)) & 1;
                 self.coder.encode(bit, prob)?;
-                self.model.learn(bit as f64 - prob, bit);
+                self.model.learn(bit);
             }
 
             b_idx += 1;
@@ -48,9 +48,8 @@ impl<W: Write> Encoder<W> {
         byte_stream.read_to_end(&mut bytes)?;
         for b in bytes {
             for i in 0..8 {
-                let prob = prob_squash(self.model.pred());
                 let bit = (b >> (7 - i)) & 1;
-                self.model.learn(bit as f64 - prob, bit);
+                self.model.learn(bit);
             }
         }
 
@@ -78,7 +77,7 @@ impl<R: Read> Decoder<R> {
             for _ in 0..8 {
                 let prob = prob_squash(self.model.pred());
                 let bit = self.coder.decode(prob)?;
-                self.model.learn(bit as f64 - prob, bit);
+                self.model.learn(bit);
                 res[byte_idx] = (res[byte_idx] << 1) | bit;
             }
         }
@@ -91,9 +90,8 @@ impl<R: Read> Decoder<R> {
         byte_stream.read_to_end(&mut bytes)?;
         for b in bytes {
             for i in 0..8 {
-                let prob = prob_squash(self.model.pred());
                 let bit = (b >> (7 - i)) & 1;
-                self.model.learn(bit as f64 - prob, bit);
+                self.model.learn(bit);
             }
         }
 
