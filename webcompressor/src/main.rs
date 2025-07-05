@@ -1,15 +1,8 @@
-use std::{
-    cell::RefCell,
-    fs::File,
-    io::{Read, Write},
-    path::Path,
-    rc::Rc,
-};
+use std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc};
 
-use compress_config::{CompressConfig, ModelConfig};
+use compress_config::CompressConfig;
 use compressor::Encoder;
 use model::{HashTable, NOrderByteData};
-use model_finder::ModelFinder;
 use output_generator::render_output;
 
 mod bwt;
@@ -42,7 +35,7 @@ fn main() {
     let test_bytes = test_data.as_bytes();
 
     let encoded_data: Vec<u8> = Vec::new();
-    let mut encoder = Encoder::new(model, encoded_data).unwrap();
+    let encoder = Encoder::new(model, encoded_data).unwrap();
     let encoded_data = encoder.encode_bytes(test_bytes).unwrap();
 
     render_output(
@@ -51,7 +44,8 @@ fn main() {
         &model_config.model,
         test_bytes.len(),
         encoded_data,
-    );
+    )
+    .expect("Failed to render output");
 
     // TODO: Uncomment the following lines to enable stats gathering
     // stats::StatsGenerator::gather_and_dump(test_bytes, model).unwrap();

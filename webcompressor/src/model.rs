@@ -39,7 +39,7 @@ pub struct HashTable<Record> {
     hash_mask: usize,
 }
 
-fn hash(mut value: u32, mut shift: u32) -> u32 {
+fn hash(mut value: u32, shift: u32) -> u32 {
     const K_MUL: u32 = 0x9E35A7BD;
     value ^= value >> shift;
     K_MUL.wrapping_mul(value) >> shift
@@ -362,7 +362,7 @@ impl AdaptiveProbabilityMap {
 
         let delta_f = p_ptr - p_idx_f;
         let delta_c = p_idx_c - p_ptr;
-        let mut t;
+        let t;
         let mut next_idx;
         if delta_f <= delta_c {
             // Use floor
@@ -456,7 +456,7 @@ impl Model for NOrderByte {
         NOrderByte::pred(self)
     }
 
-    fn learn(&mut self, pred_err: f64, bit: u8) {
+    fn learn(&mut self, _pred_err: f64, bit: u8) {
         NOrderByte::learn(self, bit);
     }
 }

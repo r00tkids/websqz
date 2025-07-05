@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    model::{LnMixerPred, Model, ModelDef},
+    model::Model,
     utils::prob_squash,
 };
 use anyhow::Result;

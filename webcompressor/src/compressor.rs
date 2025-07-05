@@ -1,13 +1,7 @@
-use std::{
-    collections::HashMap,
-    io::{Read, Write},
-};
+use std::io::{Read, Write};
 
 use crate::coder::{ArithmeticDecoder, ArithmeticEncoder};
-use crate::{
-    model::Model,
-    utils::{prob_squash, U24_MAX},
-};
+use crate::{model::Model, utils::prob_squash};
 use anyhow::Result;
 
 pub struct Encoder<W: Write> {
@@ -46,7 +40,7 @@ impl<W: Write> Encoder<W> {
 
             b_idx += 1;
         }
-        Ok((self.coder.finish()?))
+        Ok(self.coder.finish()?)
     }
 
     pub fn warm_up(&mut self, mut byte_stream: impl Read) -> Result<()> {
@@ -64,6 +58,7 @@ impl<W: Write> Encoder<W> {
     }
 }
 
+#[allow(dead_code)]
 pub struct Decoder<R: Read> {
     coder: ArithmeticDecoder<R>,
     model: Box<dyn Model>,
@@ -80,7 +75,7 @@ impl<R: Read> Decoder<R> {
     pub fn decode(&mut self, size: usize) -> Result<Vec<u8>> {
         let mut res: Vec<u8> = vec![0; size];
         for byte_idx in 0..size {
-            for i in 0..8 {
+            for _ in 0..8 {
                 let prob = prob_squash(self.model.pred());
                 let bit = self.coder.decode(prob)?;
                 self.model.learn(bit as f64 - prob, bit);
@@ -126,7 +121,7 @@ mod tests {
 
         let test_bytes = test_data.as_bytes();
 
-        let mut model_finder = ModelFinder::new();
+        let model_finder = ModelFinder::new();
         let encoded_data = {
             let model = model_finder.default_model;
             let encoded_data: Vec<u8> = Vec::new();
@@ -141,7 +136,7 @@ mod tests {
             encoded_data.len()
         );
 
-        let mut model_finder = ModelFinder::new();
+        let model_finder = ModelFinder::new();
         let model = model_finder.default_model;
         let mut decoder = Decoder::new(model, encoded_data.as_slice()).unwrap();
 

@@ -1,4 +1,3 @@
-use crate::utils::U24_MAX;
 use anyhow::{anyhow, Result};
 use std::{
     io::{BufReader, BufWriter, Read, Write},
@@ -66,6 +65,7 @@ impl<W: Write> ArithmeticEncoder<W> {
     }
 }
 
+#[allow(dead_code)]
 pub struct ArithmeticDecoder<R: Read> {
     low: u32,
     high: u32,

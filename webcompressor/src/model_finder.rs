@@ -1,12 +1,9 @@
-use std::{cell::RefCell, io::Read, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    coder::ArithmeticEncoder,
     compress_config::ModelConfig,
-    model::{HashTable, LnMixerPred, Model, ModelDef, NOrderByteData},
-    utils::U24_MAX,
+    model::{HashTable, Model, ModelDef, NOrderByteData},
 };
-use anyhow::Result;
 
 pub struct ModelFinder {
     pub model_defs: Vec<ModelDef>,
@@ -48,8 +45,6 @@ impl ModelFinder {
         let model = Box::new(ModelConfig::AdaptiveProbabilityMap(Box::new(
             ModelConfig::Mixer(mixed_models.clone()),
         )));
-
-        let model2 = Box::new(ModelConfig::Mixer(mixed_models));
 
         Self {
             model_defs: vec![],

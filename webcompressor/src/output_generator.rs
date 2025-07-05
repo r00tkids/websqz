@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::compress_config::ModelConfig;
+use anyhow::Result;
 use bitflags::bitflags;
 use bytes::BufMut;
 use handlebars::Handlebars;
@@ -89,7 +90,7 @@ pub fn render_output(
     model_config: &ModelConfig,
     size_before_encoding: usize,
     mut encoded_data: Vec<u8>,
-) -> () {
+) -> Result<()> {
     fs::create_dir_all(output_dir).expect("Failed to create output directory");
 
     encoded_data.put_u32(size_before_encoding as u32);
@@ -103,12 +104,12 @@ pub fn render_output(
     encoded_data_file
         .write(&header)
         .expect("Failed to write encoded data to input.bin");
-    encoded_data_file.write(&encoded_data);
+    encoded_data_file.write(&encoded_data)?;
 
     let mut features_used = ModelRef::None;
     let decompression_code = generate_js_decompression_code(model_config, &mut features_used);
 
-    match target {
+    Ok(match target {
         Target::Web => {
             let html_path = output_dir.join("index.html");
             let writer = fs::File::create(&html_path).expect("Failed to create index.html file");
@@ -136,5 +137,5 @@ pub fn render_output(
             )
             .expect("Failed to render web compressor template");
         }
-    }
+    })
 }

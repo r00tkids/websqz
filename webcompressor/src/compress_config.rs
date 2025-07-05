@@ -3,9 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    model::{AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, NOrderByte, NOrderByteData},
-    output_generator::{generate_js_decompression_code, ModelRef},
+use crate::model::{
+    AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, NOrderByte, NOrderByteData,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,10 +42,5 @@ impl ModelConfig {
             ),
             ModelConfig::Word => Box::new(NOrderByte::new_word_model(hash_table, 255)),
         })
-    }
-
-    pub fn generate_js_code(&self) -> String {
-        let mut features_used = ModelRef::None;
-        generate_js_decompression_code(self, &mut features_used)
     }
 }
