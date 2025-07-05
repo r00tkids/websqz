@@ -95,6 +95,8 @@ impl NOrderByteDataRec {
 
 /// NOrderByte model for byte predictions
 /// Can describe [0, 8] order models and partial models
+/// It also supports being a word model
+/// (using characters as window filters)
 pub struct NOrderByte {
     ctx: u32,
     hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
@@ -103,12 +105,13 @@ pub struct NOrderByte {
     magic_num: u32,
     prev_bytes: u64,
     mask: u64,
+    is_word_model: bool,
 
     bit_ctx: u32,
 }
 
 impl NOrderByte {
-    pub fn new(
+    pub fn new_norder_model(
         byte_mask: u8,
         hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
         max_count: u32,
@@ -128,6 +131,23 @@ impl NOrderByte {
             hash_table: hash_table,
             prev_bytes: 0,
             mask: bit_mask,
+            is_word_model: false,
+        }
+    }
+
+    pub fn new_word_model(
+        hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
+        max_count: u32,
+    ) -> Self {
+        Self {
+            ctx: 0,
+            bit_ctx: 1,
+            magic_num: hash(1337 as u32, 2),
+            max_count: max_count,
+            hash_table: hash_table,
+            prev_bytes: 0,
+            mask: 0xffffffff,
+            is_word_model: true,
         }
     }
 
@@ -163,7 +183,20 @@ impl NOrderByte {
         if self.bit_ctx >= 256 {
             let current_byte = self.bit_ctx & 0xff;
 
-            self.prev_bytes = (self.prev_bytes << 8) | current_byte as u64;
+            if self.is_word_model {
+                let next_char = self.bit_ctx as u8 as char;
+                if next_char.is_alphanumeric() {
+                    self.prev_bytes = (self.prev_bytes as u32
+                        ^ next_char.to_lowercase().next().unwrap() as u32)
+                        as u64;
+                    self.prev_bytes = self.prev_bytes.wrapping_mul(16777619) >> 16;
+                } else if self.prev_bytes != 2166136261 {
+                    self.prev_bytes = 2166136261;
+                }
+            } else {
+                self.prev_bytes = (self.prev_bytes << 8) | current_byte as u64;
+            }
+
             let masked_prev_bytes = self.prev_bytes & self.mask;
             self.ctx = (hash((masked_prev_bytes >> 32) as u32, 3)
                 .wrapping_mul(9)
@@ -413,78 +446,6 @@ impl AdaptiveProbabilityMap {
     }
 }
 
-pub struct WordPred {
-    ctx: u32,
-    hash_table: HashTable<NOrderByteData>,
-    max_count: u32,
-
-    current_word: u32,
-    prev_words: [u32; 3],
-
-    bit_ctx: u32,
-}
-
-impl WordPred {
-    pub fn new(pow2_size: u32, max_count: u32) -> Self {
-        assert!(max_count <= 255);
-
-        Self {
-            ctx: 0,
-            bit_ctx: 1,
-            max_count: max_count,
-            hash_table: HashTable::new(pow2_size),
-            prev_words: [0; 3],
-            current_word: 0,
-        }
-    }
-
-    pub fn pred(&self) -> f64 {
-        let entry = self.hash_table.get(self.ctx ^ self.bit_ctx).clone();
-        prob_stretch(entry.prob() as f64 / U24_MAX as f64)
-    }
-
-    pub fn learn(&mut self, bit: u8) {
-        {
-            let inst = self.hash_table.get_mut(self.ctx ^ self.bit_ctx);
-
-            let (mut count, mut prob) = (inst.count(), inst.prob());
-            if count < self.max_count {
-                count += 1;
-            }
-
-            // Learning function
-            prob += (U24_MAX as f64
-                * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / (count as f64 + 0.1)))
-                as i32;
-            inst.set_count(count);
-            inst.set_prob(prob);
-        }
-
-        self.bit_ctx = (self.bit_ctx << 1) | bit as u32;
-        if self.bit_ctx >= 256 {
-            // Remove the extra leading bit before using it in the ctx
-            self.bit_ctx &= 0xff;
-
-            let next_char = self.bit_ctx as u8 as char;
-            if next_char.is_alphanumeric() {
-                self.current_word =
-                    self.current_word ^ next_char.to_lowercase().next().unwrap() as u32;
-                self.current_word = self.current_word.wrapping_mul(16777619);
-            } else if self.current_word != 0 {
-                // Shift previous words
-                self.prev_words[0] = self.prev_words[1];
-                self.prev_words[1] = self.current_word;
-                self.current_word = 2166136261;
-            }
-
-            self.ctx = self.current_word;
-
-            // Reset bit_ctx
-            self.bit_ctx = 1;
-        }
-    }
-}
-
 pub trait Model {
     fn pred(&mut self) -> f64;
     fn learn(&mut self, pred_err: f64, bit: u8);
@@ -517,15 +478,5 @@ impl Model for AdaptiveProbabilityMap {
 
     fn learn(&mut self, pred_err: f64, bit: u8) {
         AdaptiveProbabilityMap::learn(self, pred_err, bit);
-    }
-}
-
-impl Model for WordPred {
-    fn pred(&mut self) -> f64 {
-        WordPred::pred(self)
-    }
-
-    fn learn(&mut self, pred_err: f64, bit: u8) {
-        WordPred::learn(self, bit);
     }
 }
