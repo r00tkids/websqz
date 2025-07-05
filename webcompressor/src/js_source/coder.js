@@ -1,43 +1,41 @@
 let ArithmeticDecoder = (input, offset) => {
-    let self = {
-        state: 0,
-        low: 0,
-        high: 0xFFFFFFFF,
-        readPtr: offset,
-    };
+    let state = 0;
+    let low = 0;
+    let high = 0xFFFFFFFF;
+    let readPtr = offset;
 
     for (let i = 0;i < 4;++i) {
-        let c = self.readPtr >= input.byteLength ? 0 : input[self.readPtr++];
-        self.state = ((self.state << 8) | c) >>> 0;
+        let c = readPtr >= input.byteLength ? 0 : input[readPtr++];
+        state = ((state << 8) | c) >>> 0;
     }
 
     return {
         decode: (p) => {
             if (p < 0. && p >= 1.) throw new Error("probability out of range");
-            if (self.high <= self.low) throw new Error("high <= low");
+            if (high <= low) throw new Error("high <= low");
 
-            let mid = (self.low + (self.high - self.low) * p) >>> 0;
-            if (mid >= self.high) {
+            let mid = (low + (high - low) * p) >>> 0;
+            if (mid >= high) {
                 // We loose some precision to prevent overflow
                 // Unlikely to happen in practice
-                mid = self.high - 1;
+                mid = high - 1;
             }
 
-            if (!(self.high > mid && mid >= self.low)) throw new Error("mid out of range");
+            if (!(high > mid && mid >= low)) throw new Error("mid out of range");
 
             let bit = 0;
-            if (self.state <= mid) {
+            if (state <= mid) {
                 bit = 1;
-                self.high = mid;
+                high = mid;
             } else {
-                self.low = (mid + 1) >>> 0;
+                low = (mid + 1) >>> 0;
             }
 
-            while (((self.high ^ self.low) >>> 0) < (1 << 24)) {
-                self.low = (self.low << 8) >>> 0;
-                self.high = ((self.high << 8) | 0xFF) >>> 0;
-                let c = self.readPtr >= input.byteLength ? 0 : input[self.readPtr++];    
-                self.state = ((self.state << 8) | c) >>> 0;
+            while (((high ^ low) >>> 0) < (1 << 24)) {
+                low = (low << 8) >>> 0;
+                high = ((high << 8) | 0xFF) >>> 0;
+                let c = readPtr >= input.byteLength ? 0 : input[readPtr++];    
+                state = ((state << 8) | c) >>> 0;
             }
 
             return bit;
@@ -56,7 +54,7 @@ let decompress = (model, data) => {
         for (let i = 0;i < 8;++i) {
             let prob = probSquash(model.pred());
             let bit = decoder.decode(prob);
-            model.learn(bit, bit - prob);
+            model.learn(bit);
             byte = (byte << 1) | bit;
         }
         output.push(byte);

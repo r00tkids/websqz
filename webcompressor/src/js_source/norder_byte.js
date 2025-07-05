@@ -19,7 +19,7 @@ let NOrderByte = (byteMask) => {
     let magicNum = hash(BigInt(byteMask), 2);
 
     for (let i = 0; i < 8; i++) {
-        bitMask |= BigInt(((byteMask >>> i) & 1) * (0xff << (i * 8)));
+        bitMask |= BigInt((byteMask >>> i) & 1) * (BigInt(0xff) << BigInt(i * 8));
     }
 
     return {

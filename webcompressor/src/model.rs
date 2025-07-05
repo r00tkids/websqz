@@ -209,12 +209,6 @@ impl NOrderByte {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ModelDef {
-    pub byte_mask: u8,
-    pub weight: f64,
-}
-
 pub struct ModelWithWeight {
     pub model: Box<dyn Model>,
     pub weight: f64,
@@ -259,18 +253,17 @@ impl LnMixerPred {
             let model_weight = if weights.is_empty() {
                 model.weight
             } else {
-                weights[i] * 0.3 + model.weight
+                f64::mul_add(weights[i], 0.3, model.weight)
             };
 
             let p = model.model.pred();
             self.last_p[i] = p;
-            sum += model_weight * p;
+            sum += p * model_weight;
 
             i += 1;
         }
 
         self.last_total_p = prob_squash(sum);
-
         sum
     }
 
@@ -295,6 +288,7 @@ impl LnMixerPred {
 
             model.weight += LEARNING_RATE * pred_err * p;
             weights[i] += LEARNING_RATE_CTX * pred_err * p;
+
             i += 1;
         }
 

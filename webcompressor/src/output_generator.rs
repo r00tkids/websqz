@@ -30,30 +30,7 @@ pub fn generate_js_decompression_code(
 ) -> String {
     let mut static_src: String = "".to_owned();
     let mut out_src = "let model = ".to_owned();
-    out_src += &match model_config {
-        ModelConfig::NOrderByte { byte_mask } => {
-            *features_used |= ModelRef::NOrderByte;
-            *features_used |= ModelRef::HashTable;
-            format!("NOrderByte({})", byte_mask)
-        }
-        ModelConfig::Mixer(model_configs) => {
-            *features_used |= ModelRef::Mixer;
-            let models_js: Vec<String> = model_configs
-                .into_iter()
-                .map(|c| generate_js_decompression_code(c, features_used))
-                .collect();
-            format!("LnMixerPred([{}])", models_js.join(", "))
-        }
-        ModelConfig::AdaptiveProbabilityMap(model_config) => {
-            *features_used |= ModelRef::AdaptiveProbabilityMap;
-            let inner_js = generate_js_decompression_code(model_config, features_used);
-            format!("AdaptiveProbabilityMap(19, {})", inner_js)
-        }
-        ModelConfig::Word => {
-            *features_used |= ModelRef::Word;
-            "WordPred(21, 255)".to_string()
-        }
-    };
+    out_src += generate_js_ctors(model_config, features_used).as_str();
 
     out_src += ";\n";
 
@@ -78,6 +55,33 @@ pub fn generate_js_decompression_code(
     }
 
     static_src + "\n" + out_src.as_str()
+}
+
+fn generate_js_ctors(model_config: &ModelConfig, features_used: &mut ModelRef) -> String {
+    match model_config {
+        ModelConfig::NOrderByte { byte_mask } => {
+            *features_used |= ModelRef::NOrderByte;
+            *features_used |= ModelRef::HashTable;
+            format!("NOrderByte({})", byte_mask)
+        }
+        ModelConfig::Mixer { models } => {
+            *features_used |= ModelRef::Mixer;
+            let models_js: Vec<String> = models
+                .into_iter()
+                .map(|c| generate_js_ctors(c, features_used))
+                .collect();
+            format!("LnMixerPred([{}])", models_js.join(", "))
+        }
+        ModelConfig::AdaptiveProbabilityMap(model_config) => {
+            *features_used |= ModelRef::AdaptiveProbabilityMap;
+            let inner_js = generate_js_ctors(model_config, features_used);
+            format!("AdaptiveProbabilityMap(19, {})", inner_js)
+        }
+        ModelConfig::Word => {
+            *features_used |= ModelRef::Word;
+            "WordPred(21, 255)".to_string()
+        }
+    }
 }
 
 pub enum Target {

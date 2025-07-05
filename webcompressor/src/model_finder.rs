@@ -2,11 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     compress_config::ModelConfig,
-    model::{HashTable, Model, ModelDef, NOrderByteData},
+    model::{HashTable, Model, NOrderByteData},
 };
 
 pub struct ModelFinder {
-    pub model_defs: Vec<ModelDef>,
     pub default_model: Box<dyn Model>,
 }
 
@@ -42,11 +41,12 @@ impl ModelFinder {
 
         mixed_models.push(ModelConfig::Word);
 
-        let model2 = Box::new(ModelConfig::Mixer(mixed_models.clone()));
+        let model = Box::new(ModelConfig::Mixer {
+            models: mixed_models.clone(),
+        });
 
         Self {
-            model_defs: vec![],
-            default_model: model2
+            default_model: model
                 .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(28))))
                 .unwrap(),
         }

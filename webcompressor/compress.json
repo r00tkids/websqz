@@ -1,7 +1,75 @@
 {
     "model": {
-        "type": "NOrderByte",
-        "byte_mask": "0b00000001",
-        "pow2_size": 20
+        "type": "Mixer",
+        "models": [
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00000000"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00000001"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00000011"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00000111"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00001111"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00011111"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00111111"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b01111111"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b11111111"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00000010"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00000110"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00001110"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00011110"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00000100"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00001100"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00011100"
+            },
+            {
+                "type": "NOrderByte",
+                "byte_mask": "0b00111100"
+            }
+        ]
     }
 }

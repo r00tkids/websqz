@@ -16,7 +16,7 @@ pub struct CompressConfig {
 #[serde(tag = "type")]
 pub enum ModelConfig {
     NOrderByte { byte_mask: String },
-    Mixer(Vec<ModelConfig>),
+    Mixer { models: Vec<ModelConfig> },
     AdaptiveProbabilityMap(Box<ModelConfig>),
     Word,
 }
@@ -31,8 +31,8 @@ impl ModelConfig {
                 let byte_mask = u8::from_str_radix(byte_mask.trim_start_matches("0b"), 2)?;
                 Box::new(NOrderByte::new_norder_model(byte_mask, hash_table, 255))
             }
-            ModelConfig::Mixer(model_configs) => Box::new(LnMixerPred::new(
-                model_configs
+            ModelConfig::Mixer { models } => Box::new(LnMixerPred::new(
+                models
                     .iter()
                     .map(|config| config.create_model(hash_table.clone()))
                     .collect::<Result<Vec<_>>>()?,
