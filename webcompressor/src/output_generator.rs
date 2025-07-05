@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::compress_config::ModelConfig;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bitflags::bitflags;
 use bytes::BufMut;
 use handlebars::Handlebars;
@@ -77,7 +77,7 @@ pub fn generate_js_decompression_code(
         static_src += include_str!("js_source/word.js");
     }
 
-    static_src + out_src.as_str()
+    static_src + "\n" + out_src.as_str()
 }
 
 pub enum Target {
@@ -91,13 +91,13 @@ pub fn render_output(
     size_before_encoding: usize,
     mut encoded_data: Vec<u8>,
 ) -> Result<()> {
-    fs::create_dir_all(output_dir).expect("Failed to create output directory");
+    fs::create_dir_all(output_dir).context("Failed to create output directory")?;
 
     encoded_data.put_u32(size_before_encoding as u32);
     let encoded_data_path = output_dir.join("input.pack");
 
     let mut encoded_data_file = BufWriter::new(
-        fs::File::create(&encoded_data_path).expect("Failed to create input.bin file"),
+        fs::File::create(&encoded_data_path).context("Failed to create input.bin file")?,
     );
     let mut header = Vec::<u8>::new();
     header.put_u32(size_before_encoding as u32);
@@ -119,7 +119,7 @@ pub fn render_output(
                 &json!({}),
                 writer,
             )
-            .expect("Failed to render web compressor template");
+            .context("Failed to render web decompressor template")?
         }
         Target::Node => {
             let html_path = output_dir.join("index.mjs");
@@ -135,7 +135,7 @@ pub fn render_output(
                 }),
                 writer,
             )
-            .expect("Failed to render web compressor template");
+            .context("Failed to render node decompressor template")?
         }
     })
 }
