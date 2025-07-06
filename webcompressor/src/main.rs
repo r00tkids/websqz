@@ -70,9 +70,10 @@ mod node_tests {
         )
         .expect("Failed to parse compress.json");
 
+        let hash_table = HashTable::<NOrderByteData>::new(12);
         let model = model_config
             .model
-            .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(10))))
+            .create_model(Rc::new(RefCell::new(hash_table)))
             .expect("Failed to create model from config");
 
         let mut input = String::new();

@@ -1,7 +1,7 @@
 let U24Max = 0xffffff;
 let U64Max = 0xffffffffffffn;
 
-let NOrderByteHashMap = HashMap(10/*28*/, 4, { prob: U24Max >> 1, count: 0 }, (view, value) => {
+let NOrderByteHashMap = HashMap(12/*28*/, 4, { prob: U24Max >> 1, count: 0 }, (view, value) => {
     view.setUint32(0, value.prob & U24Max | (value.count << 24));
 }, (view) => {
     return {
