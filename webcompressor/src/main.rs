@@ -70,7 +70,7 @@ mod node_tests {
         )
         .expect("Failed to parse compress.json");
 
-        let hash_table = HashTable::<NOrderByteData>::new(12);
+        let hash_table = HashTable::<NOrderByteData>::new(24);
         let model = model_config
             .model
             .create_model(Rc::new(RefCell::new(hash_table)))

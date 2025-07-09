@@ -1,7 +1,7 @@
 let U24Max = 0xffffff;
 let U64Max = 0xffffffffffffffffn;
 
-let NOrderByteHashMap = HashMap(12/*28*/, 4, { prob: U24Max >> 1, count: 0 }, (view, value) => {
+let NOrderByteHashMap = HashMap(24/*28*/, 4, { prob: U24Max >> 1, count: 0 }, (view, value) => {
     view.setUint32(0, value.prob & U24Max | (value.count << 24));
 }, (view) => {
     return {
@@ -42,7 +42,7 @@ let NOrderByte = (byteMask) => {
                 prevBytes = ((prevBytes << 8n) | BigInt(currentByte)) & U64Max;
 
                 let maskedBytes = prevBytes & bitMask;
-                ctx = Number(((hash(maskedBytes >> 32n, 3) * 9n + hash(maskedBytes, 3)) * magicNum) & 0x7fffffffn);
+                ctx = Number(((hash(maskedBytes >> 32n, 3) * 9n + hash(maskedBytes & 0xffffffffn, 3)) * magicNum) & 0xffffffffn);
 
                 bitCtx = 1;
             }

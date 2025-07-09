@@ -17,16 +17,10 @@ impl<W: Write> Encoder<W> {
         })
     }
 
-    // 9-bit symbols
-    // if MSB = 0
-    //  encode as a normal byte
-    // if MSB = 1
-    //  encode dict. pos = { idx: 12 bit, len: 4 bit }
-
+    /// Encodes a byte stream using the arithmetic coder and the provided model.
     pub fn encode_bytes(mut self, mut byte_stream: impl Read) -> Result<W> {
         let mut bytes = Vec::<u8>::new();
         byte_stream.read_to_end(&mut bytes)?;
-        //bytes = bwt_optimized(&bytes);
 
         let mut b_idx = 0;
         while b_idx < bytes.len() {
@@ -43,6 +37,7 @@ impl<W: Write> Encoder<W> {
         Ok(self.coder.finish()?)
     }
 
+    /// Warms up the model by reading a byte stream and learning from it.
     pub fn warm_up(&mut self, mut byte_stream: impl Read) -> Result<()> {
         let mut bytes = Vec::<u8>::new();
         byte_stream.read_to_end(&mut bytes)?;
