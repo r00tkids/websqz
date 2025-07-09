@@ -69,6 +69,9 @@
             {
                 "type": "NOrderByte",
                 "byte_mask": "0b00111100"
+            },
+            {
+                "type": "Word"
             }
         ]
     }

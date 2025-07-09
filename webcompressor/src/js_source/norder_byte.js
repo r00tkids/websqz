@@ -1,5 +1,4 @@
-let U24Max = 0xffffff;
-let U64Max = 0xffffffffffffffffn;
+let ASCII_CASE_MASK = 32;
 
 let NOrderByteHashMap = HashMap(24/*28*/, 4, { prob: U24Max >> 1, count: 0 }, (view, value) => {
     view.setUint32(0, value.prob & U24Max | (value.count << 24));
@@ -10,17 +9,18 @@ let NOrderByteHashMap = HashMap(24/*28*/, 4, { prob: U24Max >> 1, count: 0 }, (v
     };
 });
 
-let NOrderByte = (byteMask) => {
+let NOrderByte = (byteMask, isWord) => {
     let ctx = 0;
     let maxCount = 255;
     let bitMask = 0n;
     let bitCtx = 1;
-    let prevBytes = 0n;
-    let magicNum = hash(BigInt(byteMask), 2);
+    let prevBytes = isWord ? 2166136261n : 0n;
+    let magicNum = hash(isWord ? 1337n : BigInt(byteMask), 2);
 
     for (let i = 0; i < 8; i++) {
         bitMask |= BigInt((byteMask >>> i) & 1) * (BigInt(0xff) << BigInt(i * 8));
     }
+    bitMask = isWord ? U64Max : bitMask;
 
     return {
         pred: () => {
@@ -39,10 +39,22 @@ let NOrderByte = (byteMask) => {
             if (bitCtx >= 256) {
                 let currentByte = bitCtx & 0xff;
 
-                prevBytes = ((prevBytes << 8n) | BigInt(currentByte)) & U64Max;
+                if (isWord) {
+                    let nextChar = currentByte;
+                    if ((nextChar >= 65 && nextChar <= 90) || (nextChar >= 97 && nextChar <= 122) || (nextChar >= 48 && nextChar <= 57)) {
+                        // Make nextChar lowercase
+                        if (nextChar >= 65 && nextChar <= 90)
+                            nextChar ^= ASCII_CASE_MASK;
+                        prevBytes = ((((prevBytes ^ BigInt(nextChar)) * 16777619n) & U64Max) >> 16n);
+                    } else {
+                        prevBytes = 2166136261n;
+                    }
+                } else {
+                    prevBytes = ((prevBytes << 8n) | BigInt(currentByte)) & U64Max;
+                }
 
                 let maskedBytes = prevBytes & bitMask;
-                ctx = Number(((hash(maskedBytes >> 32n, 3) * 9n + hash(maskedBytes & 0xffffffffn, 3)) * magicNum) & 0xffffffffn);
+                ctx = Number((((hash(maskedBytes >> 32n, 3) * 9n + hash(maskedBytes, 3)) + 1n) * magicNum) & U32Max);
 
                 bitCtx = 1;
             }

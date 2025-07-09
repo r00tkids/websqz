@@ -3,7 +3,7 @@ use std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc};
 use compress_config::CompressConfig;
 use compressor::Encoder;
 use model::{HashTable, NOrderByteData};
-use output_generator::render_output;
+use output_generator::{render_output, OutputGenerationOptions};
 
 mod bwt;
 mod coder;
@@ -39,9 +39,11 @@ fn main() {
     let encoded_data = encoder.encode_bytes(input_bytes).unwrap();
 
     render_output(
-        Path::new("out"),
-        output_generator::Target::Node,
-        &model_config.model,
+        OutputGenerationOptions {
+            output_dir: Path::new("out").to_owned(),
+            target: output_generator::Target::Node,
+            model_config: model_config.model,
+        },
         input_bytes.len(),
         encoded_data,
     )
@@ -54,8 +56,9 @@ fn main() {
 #[cfg(test)]
 mod node_tests {
     use std::process::Command;
-    use std::{cell::RefCell, fs::File, io::Read, os::unix::process, path::Path, rc::Rc};
+    use std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc};
 
+    use crate::output_generator::OutputGenerationOptions;
     use crate::{
         compress_config::CompressConfig,
         compressor::Encoder,
@@ -89,9 +92,11 @@ mod node_tests {
         let encoded_data = encoder.encode_bytes(input_bytes).unwrap();
 
         render_output(
-            Path::new("testout/round_trip"),
-            output_generator::Target::Node,
-            &model_config.model,
+            OutputGenerationOptions {
+                output_dir: Path::new("testout/round_trip").to_owned(),
+                target: output_generator::Target::Node,
+                model_config: model_config.model,
+            },
             input_bytes.len(),
             encoded_data,
         )

@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{BufWriter, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crate::compress_config::ModelConfig;
@@ -10,6 +10,12 @@ use bitflags::bitflags;
 use bytes::BufMut;
 use handlebars::Handlebars;
 use serde_json::json;
+
+pub struct OutputGenerationOptions {
+    pub output_dir: PathBuf,
+    pub target: Target,
+    pub model_config: ModelConfig,
+}
 
 bitflags! {
     /// Represents a set of flags.
@@ -38,7 +44,7 @@ pub fn generate_js_decompression_code(
     static_src += include_str!("js_source/coder.js");
     static_src += include_str!("js_source/utils.js");
 
-    if features_used.contains(ModelRef::NOrderByte) {
+    if *features_used & (ModelRef::NOrderByte | ModelRef::Word) != ModelRef::None {
         static_src += include_str!("js_source/norder_byte.js");
     }
 
@@ -50,10 +56,6 @@ pub fn generate_js_decompression_code(
         static_src += include_str!("js_source/adaptive_probability_map.js");
     }
 
-    if features_used.contains(ModelRef::Word) {
-        static_src += include_str!("js_source/word.js");
-    }
-
     static_src + "\n" + out_src.as_str()
 }
 
@@ -62,7 +64,7 @@ fn generate_js_ctors(model_config: &ModelConfig, features_used: &mut ModelRef) -
         ModelConfig::NOrderByte { byte_mask } => {
             *features_used |= ModelRef::NOrderByte;
             *features_used |= ModelRef::HashTable;
-            format!("NOrderByte({})", byte_mask)
+            format!("NOrderByte({}, 0)", byte_mask)
         }
         ModelConfig::Mixer { models } => {
             *features_used |= ModelRef::Mixer;
@@ -79,7 +81,7 @@ fn generate_js_ctors(model_config: &ModelConfig, features_used: &mut ModelRef) -
         }
         ModelConfig::Word => {
             *features_used |= ModelRef::Word;
-            "WordPred(21, 255)".to_string()
+            "NOrderByte(0, 1)".to_string()
         }
     }
 }
@@ -89,13 +91,17 @@ pub enum Target {
     Node,
 }
 pub fn render_output(
-    output_dir: &Path,
-    target: Target,
-    model_config: &ModelConfig,
+    output_options: OutputGenerationOptions,
     size_before_encoding: usize,
     mut encoded_data: Vec<u8>,
 ) -> Result<()> {
-    fs::create_dir_all(output_dir).context("Failed to create output directory")?;
+    let OutputGenerationOptions {
+        output_dir,
+        target,
+        model_config,
+    } = output_options;
+
+    fs::create_dir_all(&output_dir).context("Failed to create output directory")?;
 
     encoded_data.put_u32(size_before_encoding as u32);
     let encoded_data_path = output_dir.join("input.pack");
@@ -111,7 +117,7 @@ pub fn render_output(
     encoded_data_file.write(&encoded_data)?;
 
     let mut features_used = ModelRef::None;
-    let decompression_code = generate_js_decompression_code(model_config, &mut features_used);
+    let decompression_code = generate_js_decompression_code(&model_config, &mut features_used);
 
     Ok(match target {
         Target::Web => {

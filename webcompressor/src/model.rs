@@ -145,8 +145,8 @@ impl NOrderByte {
             magic_num: hash(1337 as u32, 2),
             max_count: max_count,
             hash_table: hash_table,
-            prev_bytes: 0,
-            mask: 0xffffffff,
+            prev_bytes: 2166136261,
+            mask: u64::MAX,
             is_word_model: true,
         }
     }
@@ -184,13 +184,11 @@ impl NOrderByte {
             let current_byte = self.bit_ctx & 0xff;
 
             if self.is_word_model {
-                let next_char = self.bit_ctx as u8 as char;
-                if next_char.is_alphanumeric() {
-                    self.prev_bytes = (self.prev_bytes as u32
-                        ^ next_char.to_lowercase().next().unwrap() as u32)
-                        as u64;
+                let next_char = current_byte as u8 as char;
+                if next_char.is_ascii_alphanumeric() {
+                    self.prev_bytes = self.prev_bytes ^ next_char.to_ascii_lowercase() as u64;
                     self.prev_bytes = self.prev_bytes.wrapping_mul(16777619) >> 16;
-                } else if self.prev_bytes != 2166136261 {
+                } else {
                     self.prev_bytes = 2166136261;
                 }
             } else {
@@ -201,6 +199,7 @@ impl NOrderByte {
             self.ctx = (hash((masked_prev_bytes >> 32) as u32, 3)
                 .wrapping_mul(9)
                 .wrapping_add(hash(masked_prev_bytes as u32, 3)))
+            .wrapping_add(1) // To ensure ctx doesn't overlap between models
             .wrapping_mul(self.magic_num);
 
             // Reset bit_ctx
