@@ -48,7 +48,6 @@ let decompress = (model, data) => {
     let decoder = ArithmeticDecoder(data, 4);
     let output = [];
 
-    console.log("Output size:", outputSize);
     for (let byteIdx = 0;byteIdx < outputSize;++byteIdx) {
         let byte = 0;
         for (let i = 0;i < 8;++i) {
@@ -58,10 +57,6 @@ let decompress = (model, data) => {
             byte = (byte << 1) | bit;
         }
         output.push(byte);
-
-        if (byteIdx % 1024*10 === 0) {
-            console.log(`Decoded ${byteIdx} bytes`);
-        }
     }
 
     return new Uint8Array(output);

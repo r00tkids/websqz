@@ -8,9 +8,6 @@ let HashMap = (pow2Size, itemSize, defaultValue, itemEncoder, itemDecoder) => {
         data.set(defaultValueBuffer, i * itemSize);
     }
 
-    console.log(`HashMap created with size: ${2 ** pow2Size} items, item size: ${itemSize} bytes`);
-    console.log(`Total size: ${(2 ** pow2Size * itemSize) / (1024 * 1024)} MiB`);
-
     return {
         get: (key) => {
             return itemDecoder(new DataView(data.buffer, (key & mask) * itemSize));

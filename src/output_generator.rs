@@ -2,10 +2,11 @@ use std::{
     fs,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
 };
 
 use crate::compress_config::ModelConfig;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use bitflags::bitflags;
 use bytes::BufMut;
 use handlebars::Handlebars;
@@ -122,8 +123,12 @@ pub fn render_output(
                     }),
                 )
                 .context("Failed to render decompression code template")?;
-            let deflated_code =
-                deflate_text(&decompressor_code).context("Failed to deflate decompression code")?;
+
+            let decompressor_code_ugly =
+                uglify_src(&decompressor_code).expect("Failed to uglify decompression code");
+
+            let deflated_code = deflate_text(&decompressor_code_ugly)
+                .context("Failed to deflate decompression code")?;
 
             let mut compressed_data = Vec::<u8>::new();
             encode_compressed_data(&mut compressed_data, size_before_encoding, &encoded_data)
@@ -179,7 +184,7 @@ pub fn render_output(
     })
 }
 
-pub fn deflate_text(text: &str) -> Result<Vec<u8>> {
+fn deflate_text(text: &str) -> Result<Vec<u8>> {
     let mut encoded_data = Vec::new();
     let mut writer =
         flate2::write::DeflateEncoder::new(&mut encoded_data, flate2::Compression::best());
@@ -188,7 +193,7 @@ pub fn deflate_text(text: &str) -> Result<Vec<u8>> {
     Ok(encoded_data)
 }
 
-pub fn encode_compressed_data<T: Write>(
+fn encode_compressed_data<T: Write>(
     writer: &mut T,
     size_before_encoding: usize,
     encoded_data: &[u8],
@@ -203,4 +208,34 @@ pub fn encode_compressed_data<T: Write>(
         .context("Failed to write encoded data to output")?;
 
     Ok(())
+}
+
+fn uglify_src(text: &str) -> Result<String> {
+    let child = Command::new("uglifyjs")
+        .arg("--compress")
+        .arg("--mangle")
+        .arg("--toplevel")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context(
+            "Failed to run uglifyjs. Run 'npm install -g uglify-js' to install it globally.",
+        )?;
+
+    child
+        .stdin
+        .as_ref()
+        .context("Failed to get stdin for uglifyjs")?
+        .write_all(text.as_bytes())
+        .context("Failed to write to uglifyjs stdin")?;
+
+    let output = child
+        .wait_with_output()
+        .context("Failed to read output from uglifyjs")?;
+
+    if !output.status.success() {
+        return Err(anyhow!("UglifyJS failed with status: {}", output.status));
+    }
+
+    Ok(String::from_utf8(output.stdout).context("Failed to parse uglified output")?)
 }

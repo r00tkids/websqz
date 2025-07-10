@@ -129,17 +129,19 @@ mod node_tests {
         )
         .expect("Failed to parse compress.json");
 
-        let hash_table = HashTable::<NOrderByteData>::new(24);
+        let hash_table = HashTable::<NOrderByteData>::new(26);
         let model = model_config
             .model
             .create_model(Rc::new(RefCell::new(hash_table)))
             .expect("Failed to create model from config");
 
         let mut input = String::new();
-        File::open("tests/ray_tracer/index.js")
-            .unwrap()
-            .read_to_string(&mut input)
-            .unwrap();
+        File::open(
+            "tests/reore/reore_decompressed.bin", /*"tests/ray_tracer/index.js"*/
+        )
+        .unwrap()
+        .read_to_string(&mut input)
+        .unwrap();
 
         let input_bytes = input.as_bytes();
 
