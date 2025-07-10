@@ -121,4 +121,41 @@ mod node_tests {
             "Decompressed data does not match original input"
         );
     }
+
+    #[test]
+    pub fn web() {
+        let model_config = serde_json::de::from_reader::<_, CompressConfig>(
+            File::open("compress.json").expect("Failed to open compress.json"),
+        )
+        .expect("Failed to parse compress.json");
+
+        let hash_table = HashTable::<NOrderByteData>::new(24);
+        let model = model_config
+            .model
+            .create_model(Rc::new(RefCell::new(hash_table)))
+            .expect("Failed to create model from config");
+
+        let mut input = String::new();
+        File::open("tests/ray_tracer/index.js")
+            .unwrap()
+            .read_to_string(&mut input)
+            .unwrap();
+
+        let input_bytes = input.as_bytes();
+
+        let encoded_data: Vec<u8> = Vec::new();
+        let encoder = Encoder::new(model, encoded_data).unwrap();
+        let encoded_data = encoder.encode_bytes(input_bytes).unwrap();
+
+        render_output(
+            OutputGenerationOptions {
+                output_dir: Path::new("testout/web").to_owned(),
+                target: output_generator::Target::Web,
+                model_config: model_config.model,
+            },
+            input_bytes.len(),
+            encoded_data,
+        )
+        .expect("Failed to render output");
+    }
 }

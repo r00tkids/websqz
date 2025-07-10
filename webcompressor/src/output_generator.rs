@@ -103,18 +103,7 @@ pub fn render_output(
 
     fs::create_dir_all(&output_dir).context("Failed to create output directory")?;
 
-    encoded_data.put_u32(size_before_encoding as u32);
     let encoded_data_path = output_dir.join("input.pack");
-
-    let mut encoded_data_file = BufWriter::new(
-        fs::File::create(&encoded_data_path).context("Failed to create input.bin file")?,
-    );
-    let mut header = Vec::<u8>::new();
-    header.put_u32(size_before_encoding as u32);
-    encoded_data_file
-        .write(&header)
-        .expect("Failed to write encoded data to input.bin");
-    encoded_data_file.write(&encoded_data)?;
 
     let mut features_used = ModelRef::None;
     let decompression_code = generate_js_decompression_code(&model_config, &mut features_used);
@@ -122,18 +111,58 @@ pub fn render_output(
     Ok(match target {
         Target::Web => {
             let html_path = output_dir.join("index.html");
-            let writer = fs::File::create(&html_path).expect("Failed to create index.html file");
-            let reg = Handlebars::new();
-            reg.render_template_to_write(
-                include_str!("templates/web/index.html"),
-                &json!({}),
-                writer,
-            )
-            .context("Failed to render web decompressor template")?
+            let output_file =
+                fs::File::create(&html_path).expect("Failed to create index.html file");
+
+            let decompressor_code = Handlebars::new()
+                .render_template(
+                    include_str!("templates/web/boot.js"),
+                    &json!({
+                        "decompressor_source": decompression_code
+                    }),
+                )
+                .context("Failed to render decompression code template")?;
+            let deflated_code =
+                deflate_text(&decompressor_code).context("Failed to deflate decompression code")?;
+
+            let mut compressed_data = Vec::<u8>::new();
+            encode_compressed_data(&mut compressed_data, size_before_encoding, &encoded_data)
+                .context("Failed to encode compressed data")?;
+
+            let html_header_str = Handlebars::new()
+                .render_template(
+                    include_str!("templates/web/index.html"),
+                    &json!({
+                        "decompressor_end": 171/*161*/ + deflated_code.len(),
+                    }),
+                )
+                .context("Failed to render html header template")?;
+            let html_header_bytes = html_header_str.as_bytes();
+
+            let mut writer = BufWriter::new(output_file);
+            // Write the HTML header
+            writer
+                .write_all(html_header_bytes)
+                .context("Failed to write HTML header")?;
+            // Write the decompression code
+            writer
+                .write_all(deflated_code.as_slice())
+                .context("Failed to write decompression code")?;
+            // Write the compressed data
+            writer
+                .write_all(&compressed_data)
+                .context("Failed to write compressed data")?;
         }
         Target::Node => {
-            let html_path = output_dir.join("index.mjs");
-            let writer = fs::File::create(&html_path).expect("Failed to create index.html file");
+            let mut encoded_data_file = BufWriter::new(
+                fs::File::create(&encoded_data_path).context("Failed to create input.bin file")?,
+            );
+            encode_compressed_data(&mut encoded_data_file, size_before_encoding, &encoded_data)
+                .context("Failed to encode compressed data")?;
+
+            let index_src_path = output_dir.join("index.mjs");
+            let writer =
+                fs::File::create(&index_src_path).expect("Failed to create index.html file");
 
             let reg = Handlebars::new();
             reg.render_template_to_write(
@@ -148,4 +177,30 @@ pub fn render_output(
             .context("Failed to render node decompressor template")?
         }
     })
+}
+
+pub fn deflate_text(text: &str) -> Result<Vec<u8>> {
+    let mut encoded_data = Vec::new();
+    let mut writer =
+        flate2::write::DeflateEncoder::new(&mut encoded_data, flate2::Compression::best());
+    writer.write_all(text.as_bytes())?;
+    writer.finish()?;
+    Ok(encoded_data)
+}
+
+pub fn encode_compressed_data<T: Write>(
+    writer: &mut T,
+    size_before_encoding: usize,
+    encoded_data: &[u8],
+) -> Result<()> {
+    let mut header = Vec::<u8>::new();
+    header.put_u32(size_before_encoding as u32);
+    writer
+        .write(&header)
+        .context("Failed to write header to output")?;
+    writer
+        .write(encoded_data)
+        .context("Failed to write encoded data to output")?;
+
+    Ok(())
 }
