@@ -50,7 +50,7 @@ fn main() {
     .expect("Failed to render output");
 
     // TODO: Uncomment the following lines to enable stats gathering
-    // stats::StatsGenerator::gather_and_dump(test_bytes, model).unwrap();
+    // stats::StatsGenerator::gather_and_dump(input_bytes, model).unwrap();
 }
 
 #[cfg(test)]
@@ -73,7 +73,7 @@ mod node_tests {
         )
         .expect("Failed to parse compress.json");
 
-        let hash_table = HashTable::<NOrderByteData>::new(24);
+        let hash_table = HashTable::<NOrderByteData>::new(26);
         let model = model_config
             .model
             .create_model(Rc::new(RefCell::new(hash_table)))
