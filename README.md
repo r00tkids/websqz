@@ -47,7 +47,7 @@ Options:
 ## References
 - [ZPAQ Compression Algorithm](https://mattmahoney.net/dc/zpaq_compression.pdf)
 - [Crinkler](https://github.com/runestubbe/Crinkler)
-- [about-arithmetic-coders-and-reciparith](https://cbloomrants.blogspot.com/2018/10/about-arithmetic-coders-and-reciparith.html)
+- [About arithmetic coders and recip_arith in particular](https://cbloomrants.blogspot.com/2018/10/about-arithmetic-coders-and-reciparith.html)
 - [Rant on New Arithmetic Coders](https://cbloomrants.blogspot.com/2008/10/10-05-08-5.html)
 
 ---
