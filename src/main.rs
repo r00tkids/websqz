@@ -7,12 +7,11 @@ use std::{
 };
 
 use clap::Parser;
-use compress_config::CompressConfig;
 use compressor::Encoder;
 use model::{HashTable, NOrderByteData};
 use output_generator::{render_output, OutputGenerationOptions};
 
-use crate::model_finder::{create_default_model_config, ModelFinder};
+use crate::model_finder::create_default_model_config;
 
 mod coder;
 mod compress_config;

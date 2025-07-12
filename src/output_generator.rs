@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{BufWriter, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Command, Stdio},
 };
 
@@ -9,7 +9,7 @@ use crate::compress_config::ModelConfig;
 use anyhow::{anyhow, Context, Result};
 use bitflags::bitflags;
 use bytes::BufMut;
-use clap::{Parser, ValueEnum};
+use clap::ValueEnum;
 use handlebars::Handlebars;
 use serde_json::json;
 
@@ -102,7 +102,7 @@ pub struct FileWithContent {
 pub fn render_output(
     output_options: OutputGenerationOptions,
     size_before_encoding: usize,
-    mut encoded_data: Vec<u8>,
+    encoded_data: Vec<u8>,
     extra_files: Vec<FileWithContent>,
 ) -> Result<()> {
     let OutputGenerationOptions {
