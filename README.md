@@ -44,10 +44,11 @@ Options:
 - [ ] Support larger hashmaps (>256 MiB)
 - [ ] Add support for custom loading bar JS hook
 
-
 ## References
 - [ZPAQ Compression Algorithm](https://mattmahoney.net/dc/zpaq_compression.pdf)
 - [Crinkler](https://github.com/runestubbe/Crinkler)
+- [about-arithmetic-coders-and-reciparith](https://cbloomrants.blogspot.com/2018/10/about-arithmetic-coders-and-reciparith.html)
+- [Rant on New Arithmetic Coders](https://cbloomrants.blogspot.com/2008/10/10-05-08-5.html)
 
 ---
 For questions, issues, or contributions, please open an issue or pull request on GitHub.
