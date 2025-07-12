@@ -14,7 +14,6 @@ use output_generator::{render_output, OutputGenerationOptions};
 
 use crate::model_finder::{create_default_model_config, ModelFinder};
 
-mod bwt;
 mod coder;
 mod compress_config;
 mod compressor;
@@ -84,8 +83,8 @@ fn main() {
 
     render_output(
         OutputGenerationOptions {
-            output_dir: Path::new("out").to_owned(),
-            target: output_generator::Target::Node,
+            output_dir: Path::new(&args.output_directory).to_owned(),
+            target: args.target,
             model_config: model_config,
         },
         input_bytes.len(),
