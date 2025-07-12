@@ -11,7 +11,7 @@ let NOrderByteHashMap = HashMap(26, 4, { prob: U24Max >> 1, count: 0 }, (view, v
 
 let NOrderByte = (byteMask, isWord) => {
     let ctx = 0;
-    let maxCount = 255;
+    let maxCount = 15;
     let bitMask = 0n;
     let bitCtx = 1;
     let prevBytes = isWord ? 2166136261n : 0n;
@@ -31,7 +31,7 @@ let NOrderByte = (byteMask, isWord) => {
             if (value.count < maxCount) {
                 value.count++;
             }
-            let countSqrt = Math.sqrt(value.count) + 0.2;
+            let countSqrt = value.count + 0.2;
             value.prob += (U24Max * ((bit - (value.prob / U24Max)) / countSqrt)) | 0;
             NOrderByteHashMap.set(ctx ^ bitCtx, value);
 

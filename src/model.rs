@@ -127,7 +127,7 @@ impl NOrderByte {
             ctx: 0,
             bit_ctx: 1,
             magic_num: hash(byte_mask as u32, 2),
-            max_count: max_count,
+            max_count: 15,
             hash_table: hash_table,
             prev_bytes: 0,
             mask: bit_mask,
@@ -143,7 +143,7 @@ impl NOrderByte {
             ctx: 0,
             bit_ctx: 1,
             magic_num: hash(1337 as u32, 2),
-            max_count: max_count,
+            max_count: 15,
             hash_table: hash_table,
             prev_bytes: 2166136261,
             mask: u64::MAX,
@@ -171,7 +171,7 @@ impl NOrderByte {
                 count += 1;
             }
 
-            let count_sqrt = (count as f64).sqrt() + 0.2;
+            let count_sqrt = count as f64 + 0.2;
             // Learning function
             prob += (U24_MAX as f64 * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / count_sqrt))
                 as i32;
