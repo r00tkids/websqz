@@ -1,5 +1,5 @@
-# Websqz
-Websqz is a tool for compressing and decompressing demo intros for the web. The current overhead is about 1.6 KiB, so it's primarily intended for 64KiB intros, though this may change in the future. 
+# websqz
+websqz is a tool for compressing and decompressing demo intros for the web. The current overhead is about 1.6 KiB, so it's primarily intended for 64KiB intros, though this may change in the future. 
 It's inspired by [Crinkler](https://github.com/runestubbe/Crinkler) and ZPaq series of compressors.
 
 ## Features
@@ -18,7 +18,7 @@ It's inspired by [Crinkler](https://github.com/runestubbe/Crinkler) and ZPaq ser
      ```sh
      npm install -g uglify-js
      ```
-   - Build and install Websqz (requires Rust and Cargo):
+   - Build and install websqz (requires Rust and Cargo):
      ```sh
      cargo install --path .
      ```
