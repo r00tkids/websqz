@@ -9,6 +9,7 @@ use crate::compress_config::ModelConfig;
 use anyhow::{anyhow, Context, Result};
 use bitflags::bitflags;
 use bytes::BufMut;
+use clap::{Parser, ValueEnum};
 use handlebars::Handlebars;
 use serde_json::json;
 
@@ -87,14 +88,22 @@ fn generate_js_ctors(model_config: &ModelConfig, features_used: &mut ModelRef) -
     }
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Clone)]
 pub enum Target {
     Web,
     Node,
 }
+
+pub struct FileWithContent {
+    pub path: PathBuf,
+    pub content: Vec<u8>,
+}
+
 pub fn render_output(
     output_options: OutputGenerationOptions,
     size_before_encoding: usize,
     mut encoded_data: Vec<u8>,
+    extra_files: Vec<FileWithContent>,
 ) -> Result<()> {
     let OutputGenerationOptions {
         output_dir,
@@ -103,8 +112,6 @@ pub fn render_output(
     } = output_options;
 
     fs::create_dir_all(&output_dir).context("Failed to create output directory")?;
-
-    let encoded_data_path = output_dir.join("input.pack");
 
     let mut features_used = ModelRef::None;
     let decompression_code = generate_js_decompression_code(&model_config, &mut features_used);
@@ -115,11 +122,39 @@ pub fn render_output(
             let output_file =
                 fs::File::create(&html_path).expect("Failed to create index.html file");
 
+            let mut compressed_data = Vec::<u8>::new();
+            encode_compressed_data(&mut compressed_data, size_before_encoding, &encoded_data)
+                .context("Failed to encode compressed data")?;
+
+            let mut files_map = "files={".to_owned();
+            let mut offset = 0;
+            let mut is_first = true;
+            for file in &extra_files {
+                if is_first {
+                    is_first = false;
+                } else {
+                    files_map += ", ";
+                }
+
+                let start_offset = encoded_data.len() + 4 + offset;
+                files_map += &format!(
+                    "\"{}\": a.slice({},{})",
+                    file.path.file_name().expect("File name").to_str().unwrap(),
+                    start_offset,
+                    start_offset + file.content.len()
+                );
+
+                offset += file.content.len();
+                compressed_data.extend_from_slice(&file.content);
+            }
+            files_map += "}";
+
             let decompressor_code = Handlebars::new()
                 .render_template(
                     include_str!("templates/web/boot.js"),
                     &json!({
-                        "decompressor_source": decompression_code
+                        "decompressor_source": decompression_code,
+                        "files_map": files_map,
                     }),
                 )
                 .context("Failed to render decompression code template")?;
@@ -129,10 +164,6 @@ pub fn render_output(
 
             let deflated_code = deflate_text(&decompressor_code_ugly)
                 .context("Failed to deflate decompression code")?;
-
-            let mut compressed_data = Vec::<u8>::new();
-            encode_compressed_data(&mut compressed_data, size_before_encoding, &encoded_data)
-                .context("Failed to encode compressed data")?;
 
             let html_header_str = Handlebars::new()
                 .render_template(
@@ -159,6 +190,7 @@ pub fn render_output(
                 .context("Failed to write compressed data")?;
         }
         Target::Node => {
+            let encoded_data_path = output_dir.join("input.pack");
             let mut encoded_data_file = BufWriter::new(
                 fs::File::create(&encoded_data_path).context("Failed to create input.bin file")?,
             );

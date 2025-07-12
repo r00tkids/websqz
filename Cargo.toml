@@ -1,5 +1,7 @@
 [package]
 name = "websqz"
+authors = ["Emil Sandstø"]
+description = "WebSQZ is a tool for compressing and decompressing demo intros for web."
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +9,7 @@ edition = "2021"
 anyhow = "1.0.98"
 bitflags = "2.9.1"
 bytes = "1.10.1"
-clap = "4.5.41"
+clap = { version="4.5.41", features = ["derive"] }
 flate2 = "1.1.2"
 handlebars = "6.3.2"
 serde = { version="1.0.219", features=["derive"] }

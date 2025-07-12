@@ -1,9 +1,18 @@
-use std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc};
+use std::{
+    cell::RefCell,
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
+use clap::Parser;
 use compress_config::CompressConfig;
 use compressor::Encoder;
 use model::{HashTable, NOrderByteData};
 use output_generator::{render_output, OutputGenerationOptions};
+
+use crate::model_finder::{create_default_model_config, ModelFinder};
 
 mod bwt;
 mod coder;
@@ -15,20 +24,43 @@ mod output_generator;
 mod stats;
 mod utils;
 
+/// Command-line arguments
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+struct Args {
+    /// Javascript file being evaluated after decompression
+    #[arg(short, long, required = true)]
+    js_main: String,
+
+    /// Files to be included and packed into the output, without compression
+    #[arg(short, long, value_delimiter = ',')]
+    extra_pre_compressed_files: Vec<String>,
+
+    /// Output directory
+    #[arg(short, long)]
+    output_directory: String,
+
+    /// Target platform for the output
+    #[arg(short, long, default_value = "web")]
+    target: output_generator::Target,
+}
+
 fn main() {
-    let model_config = serde_json::de::from_reader::<_, CompressConfig>(
-        File::open("compress.json").expect("Failed to open compress.json"),
-    )
-    .expect("Failed to parse compress.json");
+    let args = Args::parse();
+
+    if args.js_main.is_empty() {
+        panic!("No JS main file specified");
+    }
+
+    let model_config = create_default_model_config();
 
     let model = model_config
-        .model
-        .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(10))))
+        .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(26))))
         .expect("Failed to create model from config");
 
     let mut input = String::new();
-    File::open("tests/ray_tracer/index.js")
-        .unwrap()
+    File::open(args.js_main)
+        .expect("Failed to open JS main file")
         .read_to_string(&mut input)
         .unwrap();
 
@@ -38,27 +70,38 @@ fn main() {
     let encoder = Encoder::new(model, encoded_data).unwrap();
     let encoded_data = encoder.encode_bytes(input_bytes).unwrap();
 
+    let extra_files = args
+        .extra_pre_compressed_files
+        .into_iter()
+        .map(|path| {
+            let content = std::fs::read(&path).expect("Failed to read extra file");
+            return output_generator::FileWithContent {
+                path: PathBuf::from(&path),
+                content,
+            };
+        })
+        .collect();
+
     render_output(
         OutputGenerationOptions {
             output_dir: Path::new("out").to_owned(),
             target: output_generator::Target::Node,
-            model_config: model_config.model,
+            model_config: model_config,
         },
         input_bytes.len(),
         encoded_data,
+        extra_files,
     )
     .expect("Failed to render output");
-
-    // TODO: Uncomment the following lines to enable stats gathering
-    // stats::StatsGenerator::gather_and_dump(input_bytes, model).unwrap();
 }
 
 #[cfg(test)]
 mod node_tests {
+    use std::path::PathBuf;
     use std::process::Command;
     use std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc};
 
-    use crate::output_generator::OutputGenerationOptions;
+    use crate::output_generator::{FileWithContent, OutputGenerationOptions};
     use crate::{
         compress_config::CompressConfig,
         compressor::Encoder,
@@ -99,6 +142,7 @@ mod node_tests {
             },
             input_bytes.len(),
             encoded_data,
+            vec![],
         )
         .expect("Failed to render output");
 
@@ -137,7 +181,7 @@ mod node_tests {
 
         let mut input = String::new();
         File::open(
-            "tests/reore/reore_decompressed.bin", /*"tests/ray_tracer/index.js"*/
+            "tests/ray_tracer/index.js", /*"tests/reore/reore_decompressed.bin"*/
         )
         .unwrap()
         .read_to_string(&mut input)
@@ -157,6 +201,10 @@ mod node_tests {
             },
             input_bytes.len(),
             encoded_data,
+            vec![FileWithContent {
+                path: PathBuf::from("Cargo.toml"),
+                content: std::fs::read("Cargo.toml").expect("Failed to read Cargo.toml"),
+            }],
         )
         .expect("Failed to render output");
     }
