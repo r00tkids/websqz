@@ -31,8 +31,8 @@ let NOrderByte = (byteMask, isWord) => {
             if (value.count < maxCount) {
                 value.count++;
             }
-            let countPow = Math.pow(value.count, 0.72) + 0.19;
-            value.prob += (U24Max * ((bit - (value.prob / U24Max)) / countPow)) | 0;
+            let countSqrt = Math.sqrt(value.count) + 0.2;
+            value.prob += (U24Max * ((bit - (value.prob / U24Max)) / countSqrt)) | 0;
             NOrderByteHashMap.set(ctx ^ bitCtx, value);
 
             bitCtx = (bitCtx << 1) | bit;

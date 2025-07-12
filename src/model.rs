@@ -171,10 +171,11 @@ impl NOrderByte {
                 count += 1;
             }
 
-            let count_pow = (count as f64).powf(0.72) + 0.19;
+            let count_sqrt = (count as f64).sqrt() + 0.2;
             // Learning function
-            prob += (U24_MAX as f64 * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / count_pow))
+            prob += (U24_MAX as f64 * ((bit as f64 - (prob as f64 / U24_MAX as f64)) / count_sqrt))
                 as i32;
+
             inst.set_count(count);
             inst.set_prob(prob);
         }
