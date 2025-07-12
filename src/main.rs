@@ -6,6 +6,7 @@ use std::{
     rc::Rc,
 };
 
+use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use compressor::Encoder;
 use model::{HashTable, NOrderByteData};
@@ -43,40 +44,40 @@ struct Args {
     target: output_generator::Target,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.js_main.is_empty() {
-        panic!("No JS main file specified");
+        bail!("No JS main file specified");
     }
 
     let model_config = create_default_model_config();
 
     let model = model_config
         .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(26))))
-        .expect("Failed to create model from config");
+        .context("Failed to create model from config")?;
 
     let mut input = String::new();
-    File::open(args.js_main)
-        .expect("Failed to open JS main file")
-        .read_to_string(&mut input)
-        .unwrap();
+    File::open(&args.js_main)
+        .context(format!("Failed to open JS main file: {}", args.js_main))?
+        .read_to_string(&mut input)?;
 
     let input_bytes = input.as_bytes();
 
     let encoded_data: Vec<u8> = Vec::new();
-    let encoder = Encoder::new(model, encoded_data).unwrap();
-    let encoded_data = encoder.encode_bytes(input_bytes).unwrap();
+    let encoder = Encoder::new(model, encoded_data)?;
+    let encoded_data = encoder.encode_bytes(input_bytes)?;
 
-    let extra_files = args
+    let extra_files: Result<Vec<output_generator::FileWithContent>> = args
         .extra_pre_compressed_files
         .into_iter()
         .map(|path| {
-            let content = std::fs::read(&path).expect("Failed to read extra file");
-            return output_generator::FileWithContent {
+            let content =
+                std::fs::read(&path).context(format!("Failed to read extra file: {}", path))?;
+            return Ok(output_generator::FileWithContent {
                 path: PathBuf::from(&path),
                 content,
-            };
+            });
         })
         .collect();
 
@@ -88,9 +89,11 @@ fn main() {
         },
         input_bytes.len(),
         encoded_data,
-        extra_files,
+        extra_files?,
     )
-    .expect("Failed to render output");
+    .context("Failed to render output")?;
+
+    Ok(())
 }
 
 #[cfg(test)]
