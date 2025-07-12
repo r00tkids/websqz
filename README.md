@@ -42,6 +42,7 @@ Options:
 - [ ] Improve CLI interface and add more debug options
 - [ ] Expose statistic heatmap generator
 - [ ] Support larger hashmaps (>256 MiB)
+- [ ] Add support for custom loading bar JS hook
 
 
 ## References
