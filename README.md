@@ -27,7 +27,7 @@ It's inspired by [Crinkler](https://github.com/runestubbe/Crinkler) and ZPaq ser
 
 Basic compression example:
 ```sh
-websqz --js-main path/to/your/index.js --output-directory out
+websqz --js-main example/index.js --output-directory out
 ```
 
 Options:
