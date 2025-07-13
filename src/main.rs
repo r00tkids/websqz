@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use compressor::Encoder;
 use model::{HashTable, NOrderByteData};
@@ -26,7 +26,7 @@ mod utils;
 /// Command-line arguments
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
-struct Args {
+struct Cli {
     /// Javascript file being evaluated after decompression
     #[arg(short, long, required = true)]
     js_main: String,
@@ -42,10 +42,14 @@ struct Args {
     /// Target platform for the output
     #[arg(short, long, default_value = "web")]
     target: output_generator::Target,
+
+    /// If set, reports detailed compression statistics to websqz-report.html
+    #[arg(short, long)]
+    report: bool,
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = Cli::parse();
 
     if args.js_main.is_empty() {
         bail!("No JS main file specified");
