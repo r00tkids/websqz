@@ -53,6 +53,7 @@ fn main() -> Result<()> {
 
     let model_config = create_default_model_config();
 
+    println!("Initializing hash table...");
     let model = model_config
         .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(26))))
         .context("Failed to create model from config")?;
@@ -64,9 +65,14 @@ fn main() -> Result<()> {
 
     let input_bytes = input.as_bytes();
 
+    println!("Encoding input data...");
     let encoded_data: Vec<u8> = Vec::new();
     let encoder = Encoder::new(model, encoded_data)?;
     let encoded_data = encoder.encode_bytes(input_bytes)?;
+    println!(
+        "Finished encoding input data, size: {} bytes",
+        encoded_data.len()
+    );
 
     let extra_files: Result<Vec<output_generator::FileWithContent>> = args
         .extra_pre_compressed_files
@@ -81,6 +87,8 @@ fn main() -> Result<()> {
         })
         .collect();
 
+    println!("Rendering output...");
+
     render_output(
         OutputGenerationOptions {
             output_dir: Path::new(&args.output_directory).to_owned(),
@@ -92,6 +100,11 @@ fn main() -> Result<()> {
         extra_files?,
     )
     .context("Failed to render output")?;
+
+    println!(
+        "Output rendered successfully to '{}'",
+        args.output_directory
+    );
 
     Ok(())
 }
