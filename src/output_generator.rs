@@ -176,18 +176,22 @@ pub fn render_output(
             let html_header_bytes = html_header_str.as_bytes();
 
             let mut writer = BufWriter::new(output_file);
-            // Write the HTML header
             writer
                 .write_all(html_header_bytes)
                 .context("Failed to write HTML header")?;
-            // Write the decompression code
+
             writer
                 .write_all(deflated_code.as_slice())
                 .context("Failed to write decompression code")?;
-            // Write the compressed data
+
             writer
                 .write_all(&compressed_data)
                 .context("Failed to write compressed data")?;
+
+            println!(
+                "Final size of 'index.html': {} bytes",
+                html_header_bytes.len() + deflated_code.len() + compressed_data.len()
+            );
         }
         Target::Node => {
             let encoded_data_path = output_dir.join("input.pack");
