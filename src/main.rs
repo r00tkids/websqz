@@ -14,7 +14,7 @@ use model::{HashTable, NOrderByteData};
 use output_generator::{render_output, OutputGenerationOptions};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use crate::model_finder::create_default_model_config;
+use crate::{model_finder::create_default_model_config, report::ReportGenerator};
 
 mod coder;
 mod compress_config;
@@ -22,13 +22,13 @@ mod compressor;
 mod model;
 mod model_finder;
 mod output_generator;
-mod stats;
+mod report;
 mod utils;
 
 /// Command-line arguments
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
-struct Args {
+struct Cli {
     /// Javascript file being evaluated after decompression
     #[arg(short, long, required = true)]
     js_main: String,
@@ -44,6 +44,10 @@ struct Args {
     /// Target platform for the output
     #[arg(short, long, default_value = "web")]
     target: output_generator::Target,
+
+    /// If set, reports detailed compression statistics to websqz-report.html
+    #[arg(short, long)]
+    report: bool,
 }
 
 fn main() -> Result<()> {
@@ -57,7 +61,7 @@ fn main() -> Result<()> {
         .with(EnvFilter::from_default_env())
         .try_init()?;
 
-    let args = Args::parse();
+    let args = Cli::parse();
 
     if args.js_main.is_empty() {
         bail!("No JS main file specified");
@@ -70,19 +74,17 @@ fn main() -> Result<()> {
         .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(26))))
         .context("Failed to create model from config")?;
 
-    let mut input = String::new();
+    let mut input_bytes = Vec::new();
     File::open(&args.js_main)
         .context(format!("Failed to open JS main file: {}", args.js_main))?
-        .read_to_string(&mut input)?;
+        .read_to_end(&mut input_bytes)?;
 
-    let input_bytes = input.as_bytes();
-
-    println!("Encoding input data...");
+    println!("Encoding input data ({} bytes)", input_bytes.len());
     let encoded_data: Vec<u8> = Vec::new();
     let encoder = Encoder::new(model, encoded_data)?;
-    let encoded_data = encoder.encode_bytes(input_bytes)?;
+    let encoded_data = encoder.encode_bytes(input_bytes.as_slice())?;
     println!(
-        "Finished encoding input data, size: {} bytes",
+        "Finished encoding input data ({} bytes)",
         encoded_data.len()
     );
 
@@ -105,13 +107,32 @@ fn main() -> Result<()> {
         OutputGenerationOptions {
             output_dir: Path::new(&args.output_directory).to_owned(),
             target: args.target,
-            model_config: model_config,
+            model_config: model_config.clone(),
         },
         input_bytes.len(),
         encoded_data,
         extra_files?,
     )
     .context("Failed to render output")?;
+
+    if args.report {
+        println!("Generating compression report...");
+        let model = model_config
+            .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(26))))
+            .context("Failed to create model from config")?;
+
+        ReportGenerator::create(
+            input_bytes.as_slice(),
+            model,
+            Path::new(&args.output_directory),
+        )
+        .context("Failed to generate compression report")?;
+
+        println!(
+            "Report generated at '{}/report.html'",
+            args.output_directory
+        );
+    }
 
     println!(
         "Output rendered successfully to '{}'",

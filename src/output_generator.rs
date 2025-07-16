@@ -208,10 +208,20 @@ pub fn render_output(
                 .write_all(&compressed_data)
                 .context("Failed to write compressed data")?;
 
-            println!(
-                "Final size of 'index.html': {} bytes",
-                html_header_bytes.len() + deflated_code.len() + compressed_data.len()
-            );
+            let final_size = html_header_bytes.len() + deflated_code.len() + compressed_data.len();
+
+            if final_size > size_before_encoding {
+                println!(
+                    "WARNING: Final size ({}) is larger than original size ({})",
+                    final_size, size_before_encoding
+                );
+            } else {
+                println!(
+                    "Generated 'index.html' ({} bytes) with a space saving of {:.2}%",
+                    final_size,
+                    100. * (1. - final_size as f64 / size_before_encoding as f64)
+                );
+            }
         }
         Target::Node => {
             let encoded_data_path = output_dir.join("input.pack");

@@ -39,8 +39,6 @@ Options:
 ## TODO
 - [ ] Fix occasional encoder/decoder desync (likely rounding errors in JS number handling)
 - [ ] Add support for compressing additional binary files
-- [ ] Improve CLI interface and add more debug options
-- [ ] Expose statistic heatmap generator
 - [ ] Support larger hashmaps (>256 MiB)
 - [ ] Add support for custom loading bar JS hook
 
