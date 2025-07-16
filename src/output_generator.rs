@@ -12,7 +12,10 @@ use bytes::BufMut;
 use clap::ValueEnum;
 use handlebars::Handlebars;
 use serde_json::json;
+use tracing::{debug, info};
+use tracing_subscriber::field::debug;
 
+#[derive(Debug, Clone)]
 pub struct OutputGenerationOptions {
     pub output_dir: PathBuf,
     pub target: Target,
@@ -105,6 +108,8 @@ pub fn render_output(
     encoded_data: Vec<u8>,
     extra_files: Vec<FileWithContent>,
 ) -> Result<()> {
+    debug!("Rendering output with options: {:?}", output_options);
+
     let OutputGenerationOptions {
         output_dir,
         target,
@@ -162,8 +167,18 @@ pub fn render_output(
             let decompressor_code_ugly =
                 uglify_src(&decompressor_code).expect("Failed to uglify decompression code");
 
+            info!(
+                "Decompression code size before deflate: {}",
+                decompressor_code_ugly.len()
+            );
+
             let deflated_code = deflate_text(&decompressor_code_ugly)
                 .context("Failed to deflate decompression code")?;
+
+            info!(
+                "Decompression code size after deflate: {}",
+                deflated_code.len()
+            );
 
             let html_header_str = Handlebars::new()
                 .render_template(
@@ -174,6 +189,11 @@ pub fn render_output(
                 )
                 .context("Failed to render html header template")?;
             let html_header_bytes = html_header_str.as_bytes();
+
+            info!(
+                "Final overhead: {}",
+                html_header_str.len() + deflated_code.len()
+            );
 
             let mut writer = BufWriter::new(output_file);
             writer

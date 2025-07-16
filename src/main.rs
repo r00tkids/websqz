@@ -6,11 +6,13 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use compressor::Encoder;
+use human_panic::{setup_panic, Metadata};
 use model::{HashTable, NOrderByteData};
 use output_generator::{render_output, OutputGenerationOptions};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::model_finder::create_default_model_config;
 
@@ -45,6 +47,16 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    setup_panic!(
+        Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+            .support("https://github.com/r00tkids/websqz/issues")
+    );
+
+    tracing_subscriber::registry()
+        .with(fmt::layer().event_format(fmt::format().compact()))
+        .with(EnvFilter::from_default_env())
+        .try_init()?;
+
     let args = Args::parse();
 
     if args.js_main.is_empty() {
