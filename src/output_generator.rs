@@ -20,6 +20,7 @@ pub struct OutputGenerationOptions {
     pub output_dir: PathBuf,
     pub target: Target,
     pub model_config: ModelConfig,
+    pub reset_points: Vec<u32>,
 }
 
 bitflags! {
@@ -114,6 +115,7 @@ pub fn render_output(
         output_dir,
         target,
         model_config,
+        reset_points: _,
     } = output_options;
 
     fs::create_dir_all(&output_dir).context("Failed to create output directory")?;
@@ -144,7 +146,11 @@ pub fn render_output(
                 let start_offset = encoded_data.len() + 4 + offset;
                 files_map += &format!(
                     "\"{}\": a.slice({},{})",
-                    file.path.file_name().expect("File name").to_str().unwrap(),
+                    file.path
+                        .file_name()
+                        .context("File name")?
+                        .to_str()
+                        .context("File name to str")?,
                     start_offset,
                     start_offset + file.content.len()
                 );

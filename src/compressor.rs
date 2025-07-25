@@ -2,11 +2,12 @@ use std::io::{Read, Write};
 
 use crate::coder::{ArithmeticDecoder, ArithmeticEncoder};
 use crate::{model::Model, utils::prob_squash};
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 pub struct Encoder<W: Write> {
     coder: ArithmeticEncoder<W>,
     model: Box<dyn Model>,
+    reset_points: Vec<u32>,
 }
 
 impl<W: Write> Encoder<W> {
@@ -14,11 +15,19 @@ impl<W: Write> Encoder<W> {
         Ok(Self {
             coder: ArithmeticEncoder::new(output)?,
             model: model,
+            reset_points: Vec::new(),
         })
     }
 
-    /// Encodes a byte stream using the arithmetic coder and the provided model.
-    pub fn encode_bytes(mut self, mut byte_stream: impl Read) -> Result<W> {
+    /// Encodes a section using the arithmetic coder and the provided model.
+    /// Each section resets the statistics of the model, but keeps the learned probabilities.
+    /// Similar type of data should be encoded in the same section.
+    pub fn encode_section(&mut self, mut byte_stream: impl Read) -> Result<()> {
+        if !self.reset_points.is_empty() {
+            // Reset the model statistics at the start of the section
+            self.model.reset();
+        }
+
         let mut bytes = Vec::<u8>::new();
         byte_stream.read_to_end(&mut bytes)?;
 
@@ -34,7 +43,12 @@ impl<W: Write> Encoder<W> {
 
             b_idx += 1;
         }
-        Ok(self.coder.finish()?)
+        self.reset_points.push(self.coder.len() as u32);
+        Ok(())
+    }
+
+    pub fn finish(self) -> Result<()> {
+        self.coder.finish().context("Failed to finish encoding")
     }
 
     /// Warms up the model by reading a byte stream and learning from it.
@@ -115,13 +129,14 @@ mod tests {
         let test_bytes = test_data.as_bytes();
 
         let model_finder = ModelFinder::new();
-        let encoded_data = {
+        let mut encoded_data: Vec<u8> = Vec::new();
+        {
             let model = model_finder.default_model;
-            let encoded_data: Vec<u8> = Vec::new();
-            let mut encoder = Encoder::new(model, encoded_data).unwrap();
+            let mut encoder = Encoder::new(model, &mut encoded_data).unwrap();
             encoder.warm_up(bootstrap_text.as_bytes()).unwrap();
-            encoder.encode_bytes(test_bytes).unwrap()
-        };
+            encoder.encode_section(test_bytes).unwrap();
+            encoder.finish().unwrap();
+        }
 
         println!(
             "Size of input: {}\nSize of encoded data: {}",

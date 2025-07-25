@@ -80,9 +80,10 @@ fn main() -> Result<()> {
         .read_to_end(&mut input_bytes)?;
 
     println!("Encoding input data ({} bytes)", input_bytes.len());
-    let encoded_data: Vec<u8> = Vec::new();
-    let encoder = Encoder::new(model, encoded_data)?;
-    let encoded_data = encoder.encode_bytes(input_bytes.as_slice())?;
+    let mut encoded_data: Vec<u8> = Vec::new();
+    let mut encoder = Encoder::new(model, &mut encoded_data)?;
+    encoder.encode_section(input_bytes.as_slice())?;
+    encoder.finish().context("Failed to finish encoding")?;
     println!(
         "Finished encoding input data ({} bytes)",
         encoded_data.len()
@@ -108,6 +109,7 @@ fn main() -> Result<()> {
             output_dir: Path::new(&args.output_directory).to_owned(),
             target: args.target,
             model_config: model_config.clone(),
+            reset_points: vec![],
         },
         input_bytes.len(),
         encoded_data,
@@ -177,15 +179,17 @@ mod node_tests {
 
         let input_bytes = input.as_bytes();
 
-        let encoded_data: Vec<u8> = Vec::new();
-        let encoder = Encoder::new(model, encoded_data).unwrap();
-        let encoded_data = encoder.encode_bytes(input_bytes).unwrap();
+        let mut encoded_data: Vec<u8> = Vec::new();
+        let mut encoder = Encoder::new(model, &mut encoded_data).unwrap();
+        encoder.encode_section(input_bytes).unwrap();
+        encoder.finish().unwrap();
 
         render_output(
             OutputGenerationOptions {
                 output_dir: Path::new("testout/round_trip").to_owned(),
                 target: output_generator::Target::Node,
                 model_config: model_config.model,
+                reset_points: vec![],
             },
             input_bytes.len(),
             encoded_data,
@@ -236,15 +240,17 @@ mod node_tests {
 
         let input_bytes = input.as_bytes();
 
-        let encoded_data: Vec<u8> = Vec::new();
-        let encoder = Encoder::new(model, encoded_data).unwrap();
-        let encoded_data = encoder.encode_bytes(input_bytes).unwrap();
+        let mut encoded_data: Vec<u8> = Vec::new();
+        let mut encoder = Encoder::new(model, &mut encoded_data).unwrap();
+        encoder.encode_section(input_bytes).unwrap();
+        encoder.finish().unwrap();
 
         render_output(
             OutputGenerationOptions {
                 output_dir: Path::new("testout/web").to_owned(),
                 target: output_generator::Target::Web,
                 model_config: model_config.model,
+                reset_points: vec![],
             },
             input_bytes.len(),
             encoded_data,

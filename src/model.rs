@@ -6,6 +6,12 @@ use std::{
     vec,
 };
 
+pub trait Model {
+    fn pred(&mut self) -> f64;
+    fn learn(&mut self, bit: u8);
+    fn reset(&mut self);
+}
+
 #[derive(Clone, Copy)]
 pub struct NOrderByteData(u32);
 
@@ -150,8 +156,10 @@ impl NOrderByte {
             is_word_model: true,
         }
     }
+}
 
-    pub fn pred(&self) -> f64 {
+impl Model for NOrderByte {
+    fn pred(&mut self) -> f64 {
         let entry = self
             .hash_table
             .borrow()
@@ -161,7 +169,7 @@ impl NOrderByte {
         prob_stretch(entry.prob() as f64 / U24_MAX as f64)
     }
 
-    pub fn learn(&mut self, bit: u8) {
+    fn learn(&mut self, bit: u8) {
         {
             let mut hash_table = self.hash_table.borrow_mut();
             let inst = hash_table.get_mut(self.ctx ^ self.bit_ctx);
@@ -207,6 +215,12 @@ impl NOrderByte {
             self.bit_ctx = 1;
         }
     }
+
+    fn reset(&mut self) {
+        self.ctx = 0;
+        self.bit_ctx = 1;
+        self.prev_bytes = 0;
+    }
 }
 
 pub struct ModelWithWeight {
@@ -243,8 +257,10 @@ impl LnMixerPred {
             prev_byte: 0,
         }
     }
+}
 
-    pub fn pred(&mut self) -> f64 {
+impl Model for LnMixerPred {
+    fn pred(&mut self) -> f64 {
         let mut sum = 0.;
 
         let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
@@ -267,7 +283,7 @@ impl LnMixerPred {
         sum
     }
 
-    pub fn learn(&mut self, bit: u8) {
+    fn learn(&mut self, bit: u8) {
         let weights = &mut self.weights[self.prev_byte as usize][self.bit_ctx as usize - 1];
 
         if weights.is_empty() {
@@ -298,6 +314,14 @@ impl LnMixerPred {
             self.bit_ctx &= 0xff;
             self.prev_byte = self.bit_ctx;
             self.bit_ctx = 1;
+        }
+    }
+
+    fn reset(&mut self) {
+        self.prev_byte = 0;
+        self.bit_ctx = 1;
+        for model in &mut self.models_with_weight {
+            model.model.reset();
         }
     }
 }
@@ -349,8 +373,10 @@ impl AdaptiveProbabilityMap {
             input_model: input_model,
         }
     }
+}
 
-    pub fn pred(&mut self) -> f64 {
+impl Model for AdaptiveProbabilityMap {
+    fn pred(&mut self) -> f64 {
         let p = self.input_model.pred();
         // TODO: Interpolate probabilities
         let p_ptr = p.max(-8.).min(7.5) * 2.;
@@ -407,7 +433,7 @@ impl AdaptiveProbabilityMap {
         prob_stretch(new_p)
     }
 
-    pub fn learn(&mut self, bit: u8) {
+    fn learn(&mut self, bit: u8) {
         {
             let inst = &mut self.hash_table.get_mut(self.ctx ^ self.bit_ctx)
                 [self.current_prob_idx as usize];
@@ -441,39 +467,8 @@ impl AdaptiveProbabilityMap {
 
         self.input_model.learn(bit);
     }
-}
 
-pub trait Model {
-    fn pred(&mut self) -> f64;
-    fn learn(&mut self, bit: u8);
-}
-
-impl Model for NOrderByte {
-    fn pred(&mut self) -> f64 {
-        NOrderByte::pred(self)
-    }
-
-    fn learn(&mut self, bit: u8) {
-        NOrderByte::learn(self, bit);
-    }
-}
-
-impl Model for LnMixerPred {
-    fn pred(&mut self) -> f64 {
-        self.pred()
-    }
-
-    fn learn(&mut self, bit: u8) {
-        LnMixerPred::learn(self, bit);
-    }
-}
-
-impl Model for AdaptiveProbabilityMap {
-    fn pred(&mut self) -> f64 {
-        AdaptiveProbabilityMap::pred(self)
-    }
-
-    fn learn(&mut self, bit: u8) {
-        AdaptiveProbabilityMap::learn(self, bit);
+    fn reset(&mut self) {
+        todo!()
     }
 }

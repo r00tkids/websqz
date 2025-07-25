@@ -8,6 +8,7 @@ pub struct ArithmeticEncoder<W: Write> {
     low: u32,
     high: u32,
 
+    bytes_written: usize,
     output: BufWriter<W>,
 }
 
@@ -17,6 +18,7 @@ impl<W: Write> ArithmeticEncoder<W> {
             low: 0,
             high: u32::MAX,
             output: BufWriter::new(stream),
+            bytes_written: 0,
         })
     }
 
@@ -48,6 +50,7 @@ impl<W: Write> ArithmeticEncoder<W> {
         // as long as the MSB of low and high is equal
         // since at that point there isn't enough precision left in the MSB range to distinguish between 0 and 1 bit
         while (self.high ^ self.low) < (1 << 24) {
+            self.bytes_written += 1;
             self.output.write(&[(self.high >> 24) as u8])?;
             self.low <<= 8; // Shift in 0x00
             self.high = self.high << 8 | 0xFF; // Shift in 0xFF
@@ -56,12 +59,14 @@ impl<W: Write> ArithmeticEncoder<W> {
         Ok(())
     }
 
-    pub fn finish(mut self) -> Result<W> {
+    pub fn finish(mut self) -> Result<()> {
+        self.bytes_written += 1;
         self.output.write(&[(self.high >> 24) as u8])?;
-        Ok(self
-            .output
-            .into_inner()
-            .map_err(|e| anyhow!("failed to flush: {:?}", e.error()))?)
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.bytes_written
     }
 }
 
@@ -137,9 +142,9 @@ mod tests {
     pub fn round_trip() {
         let hello = "hello world";
         let hello_bytes = hello.as_bytes();
-        let encoded_data = {
-            let encoded_data: Vec<u8> = Vec::new();
-            let mut encoder = ArithmeticEncoder::new(encoded_data).unwrap();
+        let mut encoded_data: Vec<u8> = Vec::new();
+        {
+            let mut encoder = ArithmeticEncoder::new(&mut encoded_data).unwrap();
 
             for b in hello_bytes {
                 for i in 0..8 {
@@ -148,7 +153,7 @@ mod tests {
                 }
             }
             encoder.finish().unwrap()
-        };
+        }
 
         let mut decoder = ArithmeticDecoder::new(encoded_data.as_slice()).unwrap();
 
@@ -166,9 +171,9 @@ mod tests {
     #[test]
     pub fn prob_1_bit_0() {
         let bytes = [0, 0, 0, 0];
-        let encoded_data = {
-            let encoded_data: Vec<u8> = Vec::new();
-            let mut encoder = ArithmeticEncoder::new(encoded_data).unwrap();
+        let mut encoded_data: Vec<u8> = Vec::new();
+        {
+            let mut encoder = ArithmeticEncoder::new(&mut encoded_data).unwrap();
 
             for b in bytes {
                 for i in 0..8 {
@@ -177,7 +182,7 @@ mod tests {
                 }
             }
             encoder.finish().unwrap()
-        };
+        }
 
         let mut decoder = ArithmeticDecoder::new(encoded_data.as_slice()).unwrap();
 
