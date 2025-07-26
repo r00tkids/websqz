@@ -45,7 +45,7 @@ Note: `<FILENAME>` refers to the base name of the file, not its full or relative
 
 ## TODO
 - [ ] Fix occasional encoder/decoder desync (likely rounding errors in JS number handling)
-- [ x ] Add support for compressing additional binary files
+- [x] Add support for compressing additional binary files
 - [ ] Support larger hashmaps (>256 MiB)
 - [ ] Add support for custom loading bar JS hook
 
