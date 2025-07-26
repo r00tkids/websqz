@@ -27,18 +27,25 @@ It's inspired by [Crinkler](https://github.com/runestubbe/Crinkler) and ZPaq ser
 
 Basic compression example:
 ```sh
-websqz --js-main example/index.js --output-directory out
+websqz --js-main example/index.js -f example/bundled.glsl --output-directory out
 ```
 
 Options:
 - `--js-main <file>`: Entry point JavaScript file
+- `--files <FILES>`: Extra files to be compressed. Order matters, so files of similar content should be ordered together.
+- `--pre-compressed-files <FILES>`: Extra files that are already compressed (jpeg, mp4 etc.)
 - `--output-directory <dir>`: Output directory for compressed files
 - See `websqz --help` for more CLI options
 
+## Runtime API
+To access the contents of files specified with `--files` or `--pre-compressed-files`, use `wsqz.files["<FILENAME>"]`.
+`wsqz.files["<FILENAME>"]` returns an `Uint8Array`, to read it as text use `new TextDecoder().decode(wsqz.files["example.glsl"])`.
+
+Note: `<FILENAME>` refers to the base name of the file, not its full or relative path.
 
 ## TODO
 - [ ] Fix occasional encoder/decoder desync (likely rounding errors in JS number handling)
-- [ ] Add support for compressing additional binary files
+- [ x ] Add support for compressing additional binary files
 - [ ] Support larger hashmaps (>256 MiB)
 - [ ] Add support for custom loading bar JS hook
 

@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 pub struct Encoder<W: Write> {
     coder: ArithmeticEncoder<W>,
     model: Box<dyn Model>,
-    reset_points: Vec<u32>,
+    size_before_compression: usize,
 }
 
 impl<W: Write> Encoder<W> {
@@ -15,19 +15,13 @@ impl<W: Write> Encoder<W> {
         Ok(Self {
             coder: ArithmeticEncoder::new(output)?,
             model: model,
-            reset_points: Vec::new(),
+            size_before_compression: 0,
         })
     }
 
-    /// Encodes a section using the arithmetic coder and the provided model.
-    /// Each section resets the statistics of the model, but keeps the learned probabilities.
+    /// Compresses a section using the provided model.
     /// Similar type of data should be encoded in the same section.
     pub fn encode_section(&mut self, mut byte_stream: impl Read) -> Result<()> {
-        if !self.reset_points.is_empty() {
-            // Reset the model statistics at the start of the section
-            self.model.reset();
-        }
-
         let mut bytes = Vec::<u8>::new();
         byte_stream.read_to_end(&mut bytes)?;
 
@@ -43,12 +37,14 @@ impl<W: Write> Encoder<W> {
 
             b_idx += 1;
         }
-        self.reset_points.push(self.coder.len() as u32);
+
+        self.size_before_compression += bytes.len();
         Ok(())
     }
 
-    pub fn finish(self) -> Result<()> {
-        self.coder.finish().context("Failed to finish encoding")
+    pub fn finish(self) -> Result<usize> {
+        self.coder.finish().context("Failed to finish encoding")?;
+        Ok(self.size_before_compression)
     }
 
     /// Warms up the model by reading a byte stream and learning from it.

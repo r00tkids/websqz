@@ -4,7 +4,9 @@ document.body.innerHTML = "";
 p.slice(o).arrayBuffer().then(b => {
     a = new Uint8Array(b);
     d = decompress(model, a);
-    {{{files_map}}}
-    s = new TextDecoder().decode(d);
+    wsqz = {
+        {{{files_map}}}
+    };
+    s = new TextDecoder().decode(d.slice(0, {{{js_main_len}}}));
     eval(s);
 });

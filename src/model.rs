@@ -9,7 +9,6 @@ use std::{
 pub trait Model {
     fn pred(&mut self) -> f64;
     fn learn(&mut self, bit: u8);
-    fn reset(&mut self);
 }
 
 #[derive(Clone, Copy)]
@@ -215,12 +214,6 @@ impl Model for NOrderByte {
             self.bit_ctx = 1;
         }
     }
-
-    fn reset(&mut self) {
-        self.ctx = 0;
-        self.bit_ctx = 1;
-        self.prev_bytes = 0;
-    }
 }
 
 pub struct ModelWithWeight {
@@ -314,14 +307,6 @@ impl Model for LnMixerPred {
             self.bit_ctx &= 0xff;
             self.prev_byte = self.bit_ctx;
             self.bit_ctx = 1;
-        }
-    }
-
-    fn reset(&mut self) {
-        self.prev_byte = 0;
-        self.bit_ctx = 1;
-        for model in &mut self.models_with_weight {
-            model.model.reset();
         }
     }
 }
@@ -466,9 +451,5 @@ impl Model for AdaptiveProbabilityMap {
         }
 
         self.input_model.learn(bit);
-    }
-
-    fn reset(&mut self) {
-        todo!()
     }
 }

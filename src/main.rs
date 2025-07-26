@@ -14,7 +14,10 @@ use model::{HashTable, NOrderByteData};
 use output_generator::{render_output, OutputGenerationOptions};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use crate::{model_finder::create_default_model_config, report::ReportGenerator};
+use crate::{
+    model_finder::create_default_model_config, output_generator::BundledFile,
+    report::ReportGenerator,
+};
 
 mod coder;
 mod compress_config;
@@ -33,9 +36,14 @@ struct Cli {
     #[arg(short, long, required = true)]
     js_main: String,
 
+    /// Files to be included and packed into the output, with compression.
+    /// Order matters, so files of similar content should be ordered together.
+    #[arg(short, long, value_delimiter = ',')]
+    files: Vec<String>,
+
     /// Files to be included and packed into the output, without compression
     #[arg(short, long, value_delimiter = ',')]
-    extra_pre_compressed_files: Vec<String>,
+    pre_compressed_files: Vec<String>,
 
     /// Output directory
     #[arg(short, long)]
@@ -74,27 +82,47 @@ fn main() -> Result<()> {
         .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(26))))
         .context("Failed to create model from config")?;
 
-    let mut input_bytes = Vec::new();
+    let mut main_js_bytes = Vec::new();
     File::open(&args.js_main)
         .context(format!("Failed to open JS main file: {}", args.js_main))?
-        .read_to_end(&mut input_bytes)?;
+        .read_to_end(&mut main_js_bytes)?;
 
-    println!("Encoding input data ({} bytes)", input_bytes.len());
     let mut encoded_data: Vec<u8> = Vec::new();
     let mut encoder = Encoder::new(model, &mut encoded_data)?;
-    encoder.encode_section(input_bytes.as_slice())?;
-    encoder.finish().context("Failed to finish encoding")?;
+
+    println!("Compressing input data ({} bytes)", main_js_bytes.len());
+    encoder.encode_section(main_js_bytes.as_slice())?;
+
+    let mut bundled_files = Vec::new();
+    let mut offset = main_js_bytes.len() as u32;
+    for file in &args.files {
+        let mut byte_stream =
+            File::open(file).context(format!("Failed to open additional file: {}", file))?;
+        let file_len = byte_stream.metadata()?.len() as u32;
+        println!("Compressing additional file ({} bytes): {}", file_len, file);
+        encoder.encode_section(&mut byte_stream)?;
+
+        bundled_files.push(BundledFile {
+            path: PathBuf::from(file),
+            start_offset: offset,
+            length: offset + file_len,
+        });
+
+        offset += file_len;
+    }
+
+    let size_before_compression = encoder.finish().context("Failed to finish compressing")?;
     println!(
-        "Finished encoding input data ({} bytes)",
+        "Finished compressing input data ({} bytes)",
         encoded_data.len()
     );
 
-    let extra_files: Result<Vec<output_generator::FileWithContent>> = args
-        .extra_pre_compressed_files
+    let pre_compressed_files: Result<Vec<output_generator::FileWithContent>> = args
+        .pre_compressed_files
         .into_iter()
         .map(|path| {
-            let content =
-                std::fs::read(&path).context(format!("Failed to read extra file: {}", path))?;
+            let content = std::fs::read(&path)
+                .context(format!("Failed to read pre-compressed file: {}", path))?;
             return Ok(output_generator::FileWithContent {
                 path: PathBuf::from(&path),
                 content,
@@ -109,11 +137,12 @@ fn main() -> Result<()> {
             output_dir: Path::new(&args.output_directory).to_owned(),
             target: args.target,
             model_config: model_config.clone(),
-            reset_points: vec![],
         },
-        input_bytes.len(),
+        size_before_compression,
         encoded_data,
-        extra_files?,
+        main_js_bytes.len(),
+        bundled_files,
+        pre_compressed_files?,
     )
     .context("Failed to render output")?;
 
@@ -124,7 +153,7 @@ fn main() -> Result<()> {
             .context("Failed to create model from config")?;
 
         ReportGenerator::create(
-            input_bytes.as_slice(),
+            main_js_bytes.as_slice(),
             model,
             Path::new(&args.output_directory),
         )
@@ -189,10 +218,11 @@ mod node_tests {
                 output_dir: Path::new("testout/round_trip").to_owned(),
                 target: output_generator::Target::Node,
                 model_config: model_config.model,
-                reset_points: vec![],
             },
             input_bytes.len(),
             encoded_data,
+            input_bytes.len(),
+            vec![],
             vec![],
         )
         .expect("Failed to render output");
@@ -250,10 +280,11 @@ mod node_tests {
                 output_dir: Path::new("testout/web").to_owned(),
                 target: output_generator::Target::Web,
                 model_config: model_config.model,
-                reset_points: vec![],
             },
             input_bytes.len(),
             encoded_data,
+            input_bytes.len(),
+            vec![],
             vec![FileWithContent {
                 path: PathBuf::from("Cargo.toml"),
                 content: std::fs::read("Cargo.toml").expect("Failed to read Cargo.toml"),

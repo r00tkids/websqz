@@ -20,7 +20,6 @@ pub struct OutputGenerationOptions {
     pub output_dir: PathBuf,
     pub target: Target,
     pub model_config: ModelConfig,
-    pub reset_points: Vec<u32>,
 }
 
 bitflags! {
@@ -103,10 +102,18 @@ pub struct FileWithContent {
     pub content: Vec<u8>,
 }
 
+pub struct BundledFile {
+    pub path: PathBuf,
+    pub start_offset: u32,
+    pub length: u32,
+}
+
 pub fn render_output(
     output_options: OutputGenerationOptions,
-    size_before_encoding: usize,
+    size_before_compression: usize,
     encoded_data: Vec<u8>,
+    js_main_len: usize,
+    bundled_files: Vec<BundledFile>,
     extra_files: Vec<FileWithContent>,
 ) -> Result<()> {
     debug!("Rendering output with options: {:?}", output_options);
@@ -115,7 +122,6 @@ pub fn render_output(
         output_dir,
         target,
         model_config,
-        reset_points: _,
     } = output_options;
 
     fs::create_dir_all(&output_dir).context("Failed to create output directory")?;
@@ -130,10 +136,10 @@ pub fn render_output(
                 fs::File::create(&html_path).expect("Failed to create index.html file");
 
             let mut compressed_data = Vec::<u8>::new();
-            encode_compressed_data(&mut compressed_data, size_before_encoding, &encoded_data)
+            encode_compressed_data(&mut compressed_data, size_before_compression, &encoded_data)
                 .context("Failed to encode compressed data")?;
 
-            let mut files_map = "files={".to_owned();
+            let mut files_map = "files:{".to_owned();
             let mut offset = 0;
             let mut is_first = true;
             for file in &extra_files {
@@ -158,6 +164,26 @@ pub fn render_output(
                 offset += file.content.len();
                 compressed_data.extend_from_slice(&file.content);
             }
+
+            for file in &bundled_files {
+                if is_first {
+                    is_first = false;
+                } else {
+                    files_map += ", ";
+                }
+
+                files_map += &format!(
+                    "\"{}\": d.slice({},{})",
+                    file.path
+                        .file_name()
+                        .context("File name")?
+                        .to_str()
+                        .context("File name to str")?,
+                    file.start_offset,
+                    file.start_offset + file.length
+                );
+            }
+
             files_map += "}";
 
             let decompressor_code = Handlebars::new()
@@ -166,6 +192,7 @@ pub fn render_output(
                     &json!({
                         "decompressor_source": decompression_code,
                         "files_map": files_map,
+                        "js_main_len": js_main_len,
                     }),
                 )
                 .context("Failed to render decompression code template")?;
@@ -190,7 +217,7 @@ pub fn render_output(
                 .render_template(
                     include_str!("templates/web/index.html"),
                     &json!({
-                        "decompressor_end": 171/*161*/ + deflated_code.len(),
+                        "decompressor_end": 171 + deflated_code.len(),
                     }),
                 )
                 .context("Failed to render html header template")?;
@@ -216,16 +243,16 @@ pub fn render_output(
 
             let final_size = html_header_bytes.len() + deflated_code.len() + compressed_data.len();
 
-            if final_size > size_before_encoding {
+            if final_size > size_before_compression {
                 println!(
                     "WARNING: Final size ({}) is larger than original size ({})",
-                    final_size, size_before_encoding
+                    final_size, size_before_compression
                 );
             } else {
                 println!(
                     "Generated 'index.html' ({} bytes) with a space saving of {:.2}%",
                     final_size,
-                    100. * (1. - final_size as f64 / size_before_encoding as f64)
+                    100. * (1. - final_size as f64 / size_before_compression as f64)
                 );
             }
         }
@@ -234,8 +261,12 @@ pub fn render_output(
             let mut encoded_data_file = BufWriter::new(
                 fs::File::create(&encoded_data_path).context("Failed to create input.bin file")?,
             );
-            encode_compressed_data(&mut encoded_data_file, size_before_encoding, &encoded_data)
-                .context("Failed to encode compressed data")?;
+            encode_compressed_data(
+                &mut encoded_data_file,
+                size_before_compression,
+                &encoded_data,
+            )
+            .context("Failed to encode compressed data")?;
 
             let index_src_path = output_dir.join("index.mjs");
             let writer =
