@@ -116,8 +116,7 @@ mod tests {
         let bootstrap_text = "for(w=c.width=185,e=c.getContext('2d'),e.drawImage(this,p=0,0),n='',d=e.getImageData(0,0,w,150).data;t=d[p+=4];)n+=String.fromCharCode(t);(1,eval)(e)";
 
         let mut test_data = String::new();
-        // "tests/ray_tracer/index.js"
-        File::open("tests/reore/reore_decompressed.bin")
+        File::open("tests/ray_tracer/index.js")
             .unwrap()
             .read_to_string(&mut test_data)
             .unwrap();
