@@ -1,4 +1,4 @@
-name: Rust
+name: Build and Test
 
 on:
   push:
@@ -12,12 +12,11 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
       - name: Install uglify-js
         run: npm install -g uglify-js
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --release --verbose
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --release --verbose
