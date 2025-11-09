@@ -13,13 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        include:
-          - arch: [x86_64, aarch64]
-            os: windows-latest
-          - arch: [x86_64]
-            os: ubuntu_latest
-          - arch: [aarch64]
-            os: macos-latest
+
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -76,15 +70,6 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./bin/websqz-x86_64-pc-windows-msvc
           asset_name: websqz-x86_64-pc-windows-msvc.exe
-          asset_content_type: application/octet-stream
-      - name: Upload Windows artifact (aarch64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/websqz-aarch64-pc-windows-msvc
-          asset_name: websqz-aarch64-pc-windows-msvc.exe
           asset_content_type: application/octet-stream
       - name: Upload MacOS artifact (aarch64)
         uses: actions/upload-release-asset@v1
