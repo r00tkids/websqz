@@ -1,4 +1,4 @@
-name: Create artifacts
+name: Build and Release
 
 on:
   push:
@@ -18,19 +18,32 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install uglify-js
-        run: npm install -g uglify-js
       - name: Retrieve host triple
         id: host_triple
+        shell: bash
         run: |
           echo "HOST_TRIPLE=$(rustc --print host-tuple)" >> $GITHUB_OUTPUT
+      - name: Binary name
+        id: binary_name
+        shell: bash
+        run: |
+          if [[ '${{ matrix.os }}' = 'windows-latest' ]]; then
+            echo "EXE_EXT=.exe" >> $GITHUB_OUTPUT
+          else
+            echo "EXE_EXT=" >> $GITHUB_OUTPUT
+          fi
       - name: Build
-        run: cargo build --release --verbose
+        shell: bash
+        run: CARGO_BUILD_RUSTFLAGS="-C target-feature=+crt-static" cargo build --target ${{ steps.host_triple.outputs.HOST_TRIPLE }} --release --verbose
+      - name: Copy binary to expected name
+        shell: bash
+        run: |
+          cp target/${{ steps.host_triple.outputs.HOST_TRIPLE }}/release/websqz${{ steps.binary_name.outputs.EXE_EXT }} websqz${{ steps.binary_name.outputs.EXE_EXT }}
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: websqz-${{ steps.host_triple.outputs.HOST_TRIPLE }}
-          path: target/release/websqz
+          path: websqz${{ steps.binary_name.outputs.EXE_EXT }}
           retention-days: 2
   release:
     needs: build
@@ -48,18 +61,18 @@ jobs:
           draft: false
           prerelease: false
       - name: Download Artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: websqz-*
-          path: ./bin
-          merge-multiple: true
+          path: bin
+          merge-multiple: false
       - name: Upload Linux artifact (x86_64)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/websqz-x86_64-unknown-linux-gnu
+          asset_path: bin/websqz-x86_64-unknown-linux-gnu/websqz
           asset_name: websqz-x86_64-unknown-linux-gnu
           asset_content_type: application/octet-stream
       - name: Upload Windows artifact (x86_64)
@@ -68,7 +81,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/websqz-x86_64-pc-windows-msvc
+          asset_path: bin/websqz-x86_64-pc-windows-msvc/websqz.exe
           asset_name: websqz-x86_64-pc-windows-msvc.exe
           asset_content_type: application/octet-stream
       - name: Upload MacOS artifact (aarch64)
@@ -77,6 +90,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/websqz-aarch64-apple-darwin
+          asset_path: bin/websqz-aarch64-apple-darwin/websqz
           asset_name: websqz-aarch64-apple-darwin
           asset_content_type: application/octet-stream
