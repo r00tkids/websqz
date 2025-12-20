@@ -105,7 +105,7 @@ fn main() -> Result<()> {
         bundled_files.push(BundledFile {
             path: PathBuf::from(file),
             start_offset: offset,
-            length: offset + file_len,
+            length: file_len,
         });
 
         offset += file_len;
