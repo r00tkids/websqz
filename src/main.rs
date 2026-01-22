@@ -77,6 +77,10 @@ fn main() -> Result<()> {
 
     let model_config = create_default_model_config();
 
+    println!(
+        "Starting compression (websqz v{})",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("Initializing hash table...");
     let model = model_config
         .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(26))))
