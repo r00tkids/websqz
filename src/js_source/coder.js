@@ -1,8 +1,8 @@
-let ArithmeticDecoder = (input, offset) => {
+let ArithmeticDecoder = (input, len) => {
     let state = 0;
     let low = 0;
     let high = 0xFFFFFFFF;
-    let readPtr = offset;
+    let readPtr = 0;
 
     for (let i = 0;i < 4;++i) {
         let c = readPtr >= input.byteLength ? 0 : input[readPtr++];
@@ -34,7 +34,7 @@ let ArithmeticDecoder = (input, offset) => {
             while (((high ^ low) >>> 0) < (1 << 24)) {
                 low = (low << 8) >>> 0;
                 high = ((high << 8) | 0xFF) >>> 0;
-                let c = readPtr >= input.byteLength ? 0 : input[readPtr++];    
+                let c = readPtr >= len ? 0 : input[readPtr++];
                 state = ((state << 8) | c) >>> 0;
             }
 
@@ -43,12 +43,11 @@ let ArithmeticDecoder = (input, offset) => {
     };
 };
 
-let decompress = (model, data) => {
-    let outputSize = new DataView(data.buffer).getUint32(0);
-    let decoder = ArithmeticDecoder(data, 4);
+let decompress = (model, data, encodedLen, decodedLen) => {
+    let decoder = ArithmeticDecoder(data, encodedLen);
     let output = [];
 
-    for (let byteIdx = 0;byteIdx < outputSize;++byteIdx) {
+    for (let byteIdx = 0;byteIdx < decodedLen;++byteIdx) {
         let byte = 0;
         for (let i = 0;i < 8;++i) {
             let prob = probSquash(model.pred());

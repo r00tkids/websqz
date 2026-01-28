@@ -3,7 +3,7 @@
 document.body.innerHTML = "";
 p.slice(o).arrayBuffer().then(b => {
     a = new Uint8Array(b);
-    d = decompress(model, a);
+    d = decompress(model, a, {{{encoded_len}}}, {{{decoded_len}}});
     wsqz = {
         {{{files_map}}}
     };

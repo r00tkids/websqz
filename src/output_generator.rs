@@ -136,7 +136,7 @@ pub fn render_output(
                 fs::File::create(&html_path).expect("Failed to create index.html file");
 
             let mut compressed_data = Vec::<u8>::new();
-            encode_compressed_data(&mut compressed_data, size_before_compression, &encoded_data)
+            encode_compressed_data(&mut compressed_data, &encoded_data)
                 .context("Failed to encode compressed data")?;
 
             let mut files_map = "files:{".to_owned();
@@ -149,7 +149,7 @@ pub fn render_output(
                     files_map += ", ";
                 }
 
-                let start_offset = encoded_data.len() + 4 + offset;
+                let start_offset = encoded_data.len() + offset;
                 files_map += &format!(
                     "\"{}\": a.slice({},{})",
                     file.path
@@ -191,6 +191,8 @@ pub fn render_output(
                     include_str!("templates/web/boot.js"),
                     &json!({
                         "decompressor_source": decompression_code,
+                        "encoded_len": encoded_data.len(),
+                        "decoded_len": size_before_compression,
                         "files_map": files_map,
                         "js_main_len": js_main_len,
                     }),
@@ -261,12 +263,8 @@ pub fn render_output(
             let mut encoded_data_file = BufWriter::new(
                 fs::File::create(&encoded_data_path).context("Failed to create input.bin file")?,
             );
-            encode_compressed_data(
-                &mut encoded_data_file,
-                size_before_compression,
-                &encoded_data,
-            )
-            .context("Failed to encode compressed data")?;
+            encode_compressed_data(&mut encoded_data_file, &encoded_data)
+                .context("Failed to encode compressed data")?;
 
             let index_src_path = output_dir.join("index.mjs");
             let writer =
@@ -277,6 +275,8 @@ pub fn render_output(
                 include_str!("templates/node/index.mjs"),
                 &json!({
                     "decompressor_source": decompression_code,
+                    "encoded_len": encoded_data.len(),
+                    "decoded_len": size_before_compression,
                     "input_file": "input.pack",
                     "output_file": "output.bin",
                 }),
@@ -296,16 +296,7 @@ fn deflate_text(text: &str) -> Result<Vec<u8>> {
     Ok(encoded_data)
 }
 
-fn encode_compressed_data<T: Write>(
-    writer: &mut T,
-    size_before_encoding: usize,
-    encoded_data: &[u8],
-) -> Result<()> {
-    let mut header = Vec::<u8>::new();
-    header.put_u32(size_before_encoding as u32);
-    writer
-        .write(&header)
-        .context("Failed to write header to output")?;
+fn encode_compressed_data<T: Write>(writer: &mut T, encoded_data: &[u8]) -> Result<()> {
     writer
         .write(encoded_data)
         .context("Failed to write encoded data to output")?;
