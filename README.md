@@ -46,8 +46,6 @@ To access the contents of files specified with `--files` or `--pre-compressed-fi
 Note: `<FILENAME>` refers to the base name of the file, not its full or relative path.
 
 ## TODO
-- [x] Fix occasional encoder/decoder desync
-- [x] Add support for compressing additional binary files
 - [ ] Support larger hashmaps (>256 MiB)
 - [ ] Add support for custom loading bar JS hook
 

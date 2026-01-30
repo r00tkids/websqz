@@ -106,10 +106,13 @@ impl<R: Read> Decoder<R> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::{fs::File, io::Read};
 
     use crate::compressor::{Decoder, Encoder};
-    use crate::model_finder::ModelFinder;
+    use crate::model::{HashTable, NOrderByteData};
+    use crate::model_finder::{create_default_model_config, ModelFinder};
 
     #[test]
     pub fn round_trip() {

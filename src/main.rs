@@ -183,6 +183,7 @@ mod node_tests {
     use std::process::Command;
     use std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc};
 
+    use crate::model_finder::create_default_model_config;
     use crate::output_generator::{FileWithContent, OutputGenerationOptions};
     use crate::{
         compress_config::CompressConfig,
@@ -295,5 +296,60 @@ mod node_tests {
             }],
         )
         .expect("Failed to render output");
+    }
+
+    #[test]
+    pub fn round_trip_random_data() {
+        use rand::rngs::StdRng;
+        use rand::{Rng, SeedableRng};
+
+        let model_config = create_default_model_config();
+
+        let hash_table = HashTable::<NOrderByteData>::new(26);
+        let model = model_config
+            .create_model(Rc::new(RefCell::new(hash_table)))
+            .expect("Failed to create model from config");
+
+        let mut rng = StdRng::seed_from_u64(1337);
+        let mut input_bytes: Vec<u8> = vec![0u8; 1 * 1024 * 1024];
+        rng.fill(&mut input_bytes[..]);
+
+        let mut encoded_data: Vec<u8> = Vec::new();
+        let mut encoder = Encoder::new(model, &mut encoded_data).unwrap();
+        encoder.encode_section(&input_bytes[..]).unwrap();
+        encoder.finish().unwrap();
+
+        render_output(
+            OutputGenerationOptions {
+                output_dir: Path::new("testout/round_trip_rand").to_owned(),
+                target: output_generator::Target::Node,
+                model_config: model_config,
+            },
+            input_bytes.len(),
+            encoded_data,
+            input_bytes.len(),
+            vec![],
+            vec![],
+        )
+        .expect("Failed to render output");
+
+        Command::new("node")
+            .arg("testout/round_trip_rand/index.mjs")
+            .status()
+            .expect("Failed to run node decompressor");
+
+        let output_path = Path::new("testout/round_trip_rand/output.bin");
+        let output_file = File::open(output_path).expect("Failed to open output.bin");
+        let mut output_data = Vec::new();
+        output_file
+            .take(usize::MAX as u64)
+            .read_to_end(&mut output_data)
+            .expect("Failed to read output.bin");
+
+        assert_eq!(
+            input_bytes,
+            output_data.as_slice(),
+            "Decompressed data does not match original input"
+        );
     }
 }
