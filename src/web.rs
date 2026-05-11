@@ -8,15 +8,18 @@ use std::{
 
 use anyhow::{Context, Result};
 
+pub mod output_generator;
+
 use crate::{
     compressor::{
         model::{HashTable, NOrderByteData},
         model_finder::create_default_model_config,
         Encoder,
     },
-    output_generator::{self, render_output, BundledFile, OutputGenerationOptions},
     report::ReportGenerator,
 };
+pub use output_generator::Target;
+use output_generator::{render_output, BundledFile, OutputGenerationOptions};
 
 #[derive(clap::Args, Debug)]
 pub struct Args {

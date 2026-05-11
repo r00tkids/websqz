@@ -5,7 +5,6 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 
 mod compressor;
 mod macho;
-mod output_generator;
 mod report;
 mod web;
 
@@ -34,7 +33,7 @@ struct Cli {
 
     /// Target platform for the output
     #[arg(short, long, default_value = "web")]
-    target: output_generator::Target,
+    target: web::Target,
 
     /// If set, reports detailed compression statistics to websqz-report.html
     #[arg(short, long)]
@@ -96,7 +95,9 @@ mod node_tests {
         model_finder::create_default_model_config,
         Encoder,
     };
-    use crate::output_generator::{self, render_output, FileWithContent, OutputGenerationOptions};
+    use crate::web::output_generator::{
+        self, render_output, FileWithContent, OutputGenerationOptions,
+    };
 
     #[test]
     pub fn round_trip() {
