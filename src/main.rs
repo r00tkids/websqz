@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use compressor::Encoder;
 use human_panic::{setup_panic, Metadata};
 use model::{HashTable, NOrderByteData};
@@ -28,12 +28,50 @@ mod output_generator;
 mod report;
 mod utils;
 
-/// Command-line arguments
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     /// Javascript file being evaluated after decompression
-    #[arg(short, long, required = true)]
+    #[arg(short, long)]
+    js_main: Option<String>,
+
+    /// Files to be included and packed into the output, with compression.
+    /// Order matters, so files of similar content should be ordered together.
+    #[arg(short, long, value_delimiter = ',')]
+    files: Vec<String>,
+
+    /// Files to be included and packed into the output, without compression
+    #[arg(short, long, value_delimiter = ',')]
+    pre_compressed_files: Vec<String>,
+
+    /// Output directory
+    #[arg(short, long)]
+    output_directory: Option<String>,
+
+    /// Target platform for the output
+    #[arg(short, long, default_value = "web")]
+    target: output_generator::Target,
+
+    /// If set, reports detailed compression statistics to websqz-report.html
+    #[arg(short, long)]
+    report: bool,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Pack and compress JS/web assets into a self-contained output
+    Web(PackArgs),
+    /// Compress a Mach-O binary executable
+    Macho(MachoArgs),
+}
+
+#[derive(Args, Debug)]
+struct PackArgs {
+    /// Javascript file being evaluated after decompression
+    #[arg(short, long)]
     js_main: String,
 
     /// Files to be included and packed into the output, with compression.
@@ -58,6 +96,17 @@ struct Cli {
     report: bool,
 }
 
+#[derive(Args, Debug)]
+struct MachoArgs {
+    /// Input Mach-O binary executable to compress
+    #[arg(short, long)]
+    input: PathBuf,
+
+    /// Output directory
+    #[arg(short, long)]
+    output_directory: String,
+}
+
 fn main() -> Result<()> {
     setup_panic!(
         Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
@@ -71,9 +120,31 @@ fn main() -> Result<()> {
 
     let args = Cli::parse();
 
-    if args.js_main.is_empty() {
-        bail!("No JS main file specified");
+    match args.command {
+        Some(Commands::Web(pack_args)) => run_pack(pack_args),
+        Some(Commands::Macho(macho_args)) => run_macho(macho_args),
+        None => {
+            let pack_args = PackArgs {
+                js_main: args
+                    .js_main
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("--js-main is required"))?,
+                output_directory: args
+                    .output_directory
+                    .ok_or_else(|| anyhow::anyhow!("--output-directory is required"))?,
+                files: args.files,
+                pre_compressed_files: args.pre_compressed_files,
+                target: args.target,
+                report: args.report,
+            };
+            run_pack(pack_args)
+        }
     }
+}
+
+fn run_pack(args: PackArgs) -> Result<()> {
+    let js_main = args.js_main;
+    let output_directory = args.output_directory;
 
     let model_config = create_default_model_config();
 
@@ -87,8 +158,8 @@ fn main() -> Result<()> {
         .context("Failed to create model from config")?;
 
     let mut main_js_bytes = Vec::new();
-    File::open(&args.js_main)
-        .context(format!("Failed to open JS main file: {}", args.js_main))?
+    File::open(&js_main)
+        .context(format!("Failed to open JS main file: {}", js_main))?
         .read_to_end(&mut main_js_bytes)?;
 
     let mut encoded_data: Vec<u8> = Vec::new();
@@ -127,10 +198,10 @@ fn main() -> Result<()> {
         .map(|path| {
             let content = std::fs::read(&path)
                 .context(format!("Failed to read pre-compressed file: {}", path))?;
-            return Ok(output_generator::FileWithContent {
+            Ok(output_generator::FileWithContent {
                 path: PathBuf::from(&path),
                 content,
-            });
+            })
         })
         .collect();
 
@@ -138,7 +209,7 @@ fn main() -> Result<()> {
 
     render_output(
         OutputGenerationOptions {
-            output_dir: Path::new(&args.output_directory).to_owned(),
+            output_dir: Path::new(&output_directory).to_owned(),
             target: args.target,
             model_config: model_config.clone(),
         },
@@ -159,22 +230,20 @@ fn main() -> Result<()> {
         ReportGenerator::create(
             main_js_bytes.as_slice(),
             model,
-            Path::new(&args.output_directory),
+            Path::new(&output_directory),
         )
         .context("Failed to generate compression report")?;
 
-        println!(
-            "Report generated at '{}/report.html'",
-            args.output_directory
-        );
+        println!("Report generated at '{}/report.html'", output_directory);
     }
 
-    println!(
-        "Output rendered successfully to '{}'",
-        args.output_directory
-    );
+    println!("Output rendered successfully to '{}'", output_directory);
 
     Ok(())
+}
+
+fn run_macho(_args: MachoArgs) -> Result<()> {
+    bail!("Mach-O compression is not yet implemented");
 }
 
 #[cfg(test)]
