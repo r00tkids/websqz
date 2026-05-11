@@ -9,9 +9,11 @@ use std::{
 use anyhow::{Context, Result};
 
 use crate::{
-    compressor::Encoder,
-    model::{HashTable, NOrderByteData},
-    model_finder::create_default_model_config,
+    compressor::{
+        model::{HashTable, NOrderByteData},
+        model_finder::create_default_model_config,
+        Encoder,
+    },
     output_generator::{self, render_output, BundledFile, OutputGenerationOptions},
     report::ReportGenerator,
 };

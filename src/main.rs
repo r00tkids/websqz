@@ -3,15 +3,10 @@ use clap::{Parser, Subcommand};
 use human_panic::{setup_panic, Metadata};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-mod coder;
-mod compress_config;
 mod compressor;
 mod macho;
-mod model;
-mod model_finder;
 mod output_generator;
 mod report;
-mod utils;
 mod web;
 
 #[derive(Parser, Debug)]
@@ -95,14 +90,13 @@ mod node_tests {
     use std::process::Command;
     use std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc};
 
-    use crate::model_finder::create_default_model_config;
-    use crate::output_generator::{FileWithContent, OutputGenerationOptions};
-    use crate::{
+    use crate::compressor::{
         compress_config::CompressConfig,
-        compressor::Encoder,
         model::{HashTable, NOrderByteData},
-        output_generator::{self, render_output},
+        model_finder::create_default_model_config,
+        Encoder,
     };
+    use crate::output_generator::{self, render_output, FileWithContent, OutputGenerationOptions};
 
     #[test]
     pub fn round_trip() {

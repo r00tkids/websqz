@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::model::{
+use super::model::{
     AdaptiveProbabilityMap, HashTable, LnMixerPred, Model, NOrderByte, NOrderByteData,
 };
 

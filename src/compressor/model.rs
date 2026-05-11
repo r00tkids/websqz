@@ -1,4 +1,4 @@
-use crate::utils::{prob_squash, prob_stretch, U24_MAX};
+use super::utils::{prob_squash, prob_stretch, U24_MAX};
 use std::{
     cell::RefCell,
     ops::{Index, IndexMut},

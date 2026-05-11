@@ -1,79 +1,23 @@
-use std::io::{Read, Write};
+pub mod coder;
+pub mod compress_config;
+pub mod model;
+pub mod model_finder;
+pub mod utils;
 
-use crate::coder::ArithmeticEncoder;
-use crate::{model::Model, utils::prob_squash};
-use anyhow::{Context, Result};
+mod encoder;
 
-pub struct Encoder<W: Write> {
-    coder: ArithmeticEncoder<W>,
-    model: Box<dyn Model>,
-    size_before_compression: usize,
-}
-
-impl<W: Write> Encoder<W> {
-    pub fn new(model: Box<dyn Model>, output: W) -> Result<Self> {
-        Ok(Self {
-            coder: ArithmeticEncoder::new(output)?,
-            model: model,
-            size_before_compression: 0,
-        })
-    }
-
-    /// Compresses a section using the provided model.
-    /// Similar type of data should be encoded in the same section.
-    pub fn encode_section(&mut self, mut byte_stream: impl Read) -> Result<()> {
-        let mut bytes = Vec::<u8>::new();
-        byte_stream.read_to_end(&mut bytes)?;
-
-        let mut b_idx = 0;
-        while b_idx < bytes.len() {
-            let b = bytes[b_idx];
-            for i in 0..8 {
-                let prob = prob_squash(self.model.pred());
-                let bit = (b >> (7 - i)) & 1;
-                self.coder.encode(bit, prob)?;
-                self.model.learn(bit);
-            }
-
-            b_idx += 1;
-        }
-
-        self.size_before_compression += bytes.len();
-        Ok(())
-    }
-
-    pub fn finish(self) -> Result<usize> {
-        self.coder.finish().context("Failed to finish encoding")?;
-        Ok(self.size_before_compression)
-    }
-
-    /// Warms up the model by reading a byte stream and learning from it.
-    #[allow(dead_code)]
-    pub fn warm_up(&mut self, mut byte_stream: impl Read) -> Result<()> {
-        let mut bytes = Vec::<u8>::new();
-        byte_stream.read_to_end(&mut bytes)?;
-        for b in bytes {
-            for i in 0..8 {
-                let bit = (b >> (7 - i)) & 1;
-                self.model.learn(bit);
-            }
-        }
-
-        Ok(())
-    }
-}
+pub use encoder::Encoder;
 
 #[cfg(test)]
 mod tests {
     use std::{fs::File, io::Read};
 
-    use crate::coder::tests::ArithmeticDecoder;
+    use super::coder::tests::ArithmeticDecoder;
+    use super::model::Model;
+    use super::model_finder::ModelFinder;
+    use super::utils::prob_squash;
     use crate::compressor::Encoder;
-    use crate::model::Model;
-    use crate::utils::prob_squash;
     use anyhow::Result;
-
-    use crate::model_finder::ModelFinder;
 
     #[cfg(test)]
     pub struct Decoder<R: Read> {

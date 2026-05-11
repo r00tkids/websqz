@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{
+use super::{
     compress_config::ModelConfig,
     model::{HashTable, Model, NOrderByteData},
 };
