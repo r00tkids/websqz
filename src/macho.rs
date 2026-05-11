@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
+mod model;
 mod parser;
 
 #[derive(clap::Args, Debug)]
