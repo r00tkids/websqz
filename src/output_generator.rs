@@ -8,12 +8,10 @@ use std::{
 use crate::compress_config::ModelConfig;
 use anyhow::{anyhow, Context, Result};
 use bitflags::bitflags;
-use bytes::BufMut;
 use clap::ValueEnum;
 use handlebars::Handlebars;
 use serde_json::json;
 use tracing::{debug, info};
-use tracing_subscriber::field::debug;
 
 #[derive(Debug, Clone)]
 pub struct OutputGenerationOptions {

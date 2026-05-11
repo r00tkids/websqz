@@ -142,7 +142,7 @@ impl NOrderByte {
 
     pub fn new_word_model(
         hash_table: Rc<RefCell<HashTable<NOrderByteData>>>,
-        max_count: u32,
+        _max_count: u32,
     ) -> Self {
         Self {
             ctx: 0,
