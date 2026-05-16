@@ -39,7 +39,11 @@ _websqz_norder_byte_predict:
     and     x9, x9, x10
     ldr     x10, [x0, #NOB_TABLE]
     ldr     w0, [x10, x9, lsl #2]
+    cbnz    w0, 1f
+    movz    w0, #0xffff
+    movk    w0, #0x007f, lsl #16
 
+1:
     movz    w9, #0xffff
     movk    w9, #0x00ff, lsl #16
     and     w0, w0, w9
@@ -66,6 +70,10 @@ _websqz_norder_byte_learn:
     add     x21, x10, x9, lsl #2
 
     ldr     w22, [x21]              // packed NOrderByteData
+    cbnz    w22, 9f
+    movz    w22, #0xffff
+    movk    w22, #0x007f, lsl #16
+9:
     lsr     w23, w22, #24           // count
     movz    w24, #0xffff
     movk    w24, #0x00ff, lsl #16

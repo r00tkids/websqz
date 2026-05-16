@@ -22,9 +22,12 @@
 
 .globl _main
 _main:
-    stp     x29, x30, [sp, #-64]!
+    stp     x29, x30, [sp, #-80]!
     mov     x29, sp
     stp     x19, x20, [sp, #16]
+    stp     x21, x22, [sp, #32]
+    mov     x21, x0                 // argc
+    mov     x22, x1                 // argv
 
     // ArithmeticDecoder context, matching decoder.s' 32-byte layout.
     adrp    x1, _websqz_compressed_start@PAGE
@@ -32,10 +35,10 @@ _main:
     adrp    x2, _websqz_compressed_end@PAGE
     add     x2, x2, _websqz_compressed_end@PAGEOFF
     sub     x2, x2, x1
-    add     x0, sp, #32
+    add     x0, sp, #48
     bl      _arithmetic_decoder_init
 
-    add     x0, sp, #32
+    add     x0, sp, #48
     adrp    x1, _websqz_output_start@PAGE
     add     x1, x1, _websqz_output_start@PAGEOFF
     adrp    x2, _websqz_output_end@PAGE
@@ -53,9 +56,12 @@ _main:
 
     mov     x0, x19
     mov     x1, x20
+    mov     x2, x21
+    mov     x3, x22
     bl      _websqz_after_decode
 
+    ldp     x21, x22, [sp, #32]
     ldp     x19, x20, [sp, #16]
-    ldp     x29, x30, [sp], #64
+    ldp     x29, x30, [sp], #80
     mov     w0, #0
     ret
