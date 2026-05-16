@@ -1,0 +1,121 @@
+use std::path::Path;
+
+use super::pack::CompressedMacho;
+
+pub(super) fn render_payload_assembly(compressed_path: &Path, packed: &CompressedMacho) -> String {
+    let mut src = format!(
+        r#".section __DATA,__const
+.p2align 3
+.globl _websqz_compressed_start
+_websqz_compressed_start:
+.incbin "{compressed_path}"
+.globl _websqz_compressed_end
+_websqz_compressed_end:
+
+.p2align 3
+.globl _websqz_image_size
+_websqz_image_size:
+    .quad {image_size}
+.globl _websqz_entry_offset
+_websqz_entry_offset:
+    .quad {entry_offset}
+
+.p2align 3
+.globl _websqz_decode_chunks_start
+_websqz_decode_chunks_start:
+"#,
+        compressed_path = escape_assembly_path(compressed_path),
+        image_size = packed.image_size,
+        entry_offset = packed.entry_offset,
+    );
+
+    for chunk in &packed.decode_chunks {
+        src.push_str(&format!(
+            "    .quad {offset}\n    .quad {size}\n",
+            offset = chunk.offset,
+            size = chunk.size,
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_decode_chunks_end
+_websqz_decode_chunks_end:
+
+.p2align 3
+.globl _websqz_segments_start
+_websqz_segments_start:
+"#,
+    );
+    for segment in &packed.segments {
+        src.push_str(&format!(
+            "    .quad {offset}\n    .quad {size}\n    .long {init_prot}\n    .long 0\n",
+            offset = segment.offset,
+            size = segment.vm_size,
+            init_prot = segment.init_prot,
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_segments_end
+_websqz_segments_end:
+
+.p2align 3
+.globl _websqz_imports_start
+_websqz_imports_start:
+"#,
+    );
+    for (i, import) in packed.imports.iter().enumerate() {
+        src.push_str(&format!(
+            "    .quad L_websqz_import_{i}\n    .long {weak}\n    .long 0\n",
+            weak = if import.weak { 1 } else { 0 },
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_imports_end
+_websqz_imports_end:
+"#,
+    );
+    for (i, import) in packed.imports.iter().enumerate() {
+        src.push_str(&format!(
+            "L_websqz_import_{i}:\n    .asciz \"{}\"\n",
+            escape_assembly_string(&import.name),
+        ));
+    }
+
+    src.push_str(
+        r#"
+.p2align 3
+.globl _websqz_fixups_start
+_websqz_fixups_start:
+"#,
+    );
+    for fixup in &packed.fixups {
+        src.push_str(&format!(
+            "    .quad {offset}\n    .quad {target}\n    .quad {addend}\n    .long {import_index}\n    .long {high8}\n    .long {kind}\n    .long 0\n",
+            offset = fixup.offset,
+            target = fixup.target,
+            addend = fixup.addend,
+            import_index = fixup.import_index,
+            high8 = fixup.high8,
+            kind = fixup.kind,
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_fixups_end
+_websqz_fixups_end:
+"#,
+    );
+    src
+}
+
+fn escape_assembly_path(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+}
+
+fn escape_assembly_string(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\0', "")
+}
