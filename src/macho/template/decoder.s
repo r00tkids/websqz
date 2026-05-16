@@ -7,8 +7,8 @@
 //     coder.encode(bit, p)
 //     model.learn(bit)
 //
-// This file mirrors the coder part exactly and offers a callback-driven byte
-// loop for model implementations written elsewhere.
+// This file mirrors the coder part exactly and decodes byte streams using the
+// generated Mach-O model symbols.
 //
 // Decoder context layout:
 //     struct ArithmeticDecoder {
@@ -31,21 +31,10 @@
 //         d0 = probability that the next bit is 1, already squashed to [0, 1]
 //         w0 = decoded bit
 //
-//     uint32_t arithmetic_decode_byte_from_probs(ctx, probs)
-//         x0 = ArithmeticDecoder *
-//         x1 = pointer to 8 f64 probabilities, MSB first
-//         w0 = decoded byte
-//
-//     void arithmetic_decode_stream(ctx, output, output_len, model_ctx, pred_fn, learn_fn)
+//     void arithmetic_decode_stream(ctx, output, output_len)
 //         x0 = ArithmeticDecoder *
 //         x1 = output bytes
 //         x2 = output byte length
-//         x3 = model context
-//         x4 = double (*pred_fn)(void *model_ctx), returning prob_squash(model.pred())
-//         x5 = void (*learn_fn)(void *model_ctx, uint32_t bit)
-//
-// Darwin C symbols have a leading underscore.  Plain aliases are exported too
-// so the same source is convenient to assemble for ELF targets.
 
 .text
 .align 2
@@ -59,9 +48,7 @@
 .equ TOP,           0x01000000
 
 .globl _arithmetic_decoder_init
-.globl arithmetic_decoder_init
 _arithmetic_decoder_init:
-arithmetic_decoder_init:
     mov     x9, x0                  // ctx
     add     x10, x1, x2             // input_end
     mov     w11, #0                 // state
@@ -92,9 +79,7 @@ arithmetic_decoder_init:
     ret
 
 .globl _arithmetic_decode_bit
-.globl arithmetic_decode_bit
 _arithmetic_decode_bit:
-arithmetic_decode_bit:
     ldr     w9, [x0, #DEC_LOW]      // low
     ldr     w10, [x0, #DEC_HIGH]    // high
     ldr     w11, [x0, #DEC_STATE]   // state
@@ -150,86 +135,50 @@ arithmetic_decode_bit:
     mov     w0, w13
     ret
 
-.globl _arithmetic_decode_byte_from_probs
-.globl arithmetic_decode_byte_from_probs
-_arithmetic_decode_byte_from_probs:
-arithmetic_decode_byte_from_probs:
-    stp     x29, x30, [sp, #-48]!
-    mov     x29, sp
-    stp     x19, x20, [sp, #16]
-    stp     x21, x22, [sp, #32]
-
-    mov     x19, x0                 // ctx
-    mov     x20, x1                 // probabilities
-    mov     w21, #0                 // byte accumulator
-    mov     w22, #8
-
-1:
-    ldr     d0, [x20], #8
-    mov     x0, x19
-    bl      _arithmetic_decode_bit
-    lsl     w21, w21, #1
-    orr     w21, w21, w0
-    subs    w22, w22, #1
-    b.ne    1b
-
-    mov     w0, w21
-    ldp     x21, x22, [sp, #32]
-    ldp     x19, x20, [sp, #16]
-    ldp     x29, x30, [sp], #48
-    ret
-
 .globl _arithmetic_decode_stream
-.globl arithmetic_decode_stream
 _arithmetic_decode_stream:
-arithmetic_decode_stream:
-    stp     x29, x30, [sp, #-96]!
+    stp     x29, x30, [sp, #-64]!
     mov     x29, sp
     stp     x19, x20, [sp, #16]
     stp     x21, x22, [sp, #32]
     stp     x23, x24, [sp, #48]
-    stp     x25, x26, [sp, #64]
-    stp     x27, x28, [sp, #80]
 
     mov     x19, x0                 // ctx
     mov     x20, x1                 // output
     mov     x21, x2                 // bytes remaining
-    mov     x22, x3                 // model_ctx
-    mov     x23, x4                 // pred_fn
-    mov     x24, x5                 // learn_fn
+    adrp    x22, _websqz_model_ctx@PAGE
+    add     x22, x22, _websqz_model_ctx@PAGEOFF
 
 1:
     cbz     x21, 5f
-    mov     w25, #0                 // byte accumulator
-    mov     w26, #8
+    mov     w23, #0                 // byte accumulator
+    mov     w24, #8
 
 2:
     mov     x0, x22
-    blr     x23                     // d0 = pred_fn(model_ctx)
+    bl      _websqz_model_predict
 
     mov     x0, x19
     bl      _arithmetic_decode_bit
-    and     w27, w0, #1
+    and     w9, w0, #1
 
-    lsl     w25, w25, #1
-    orr     w25, w25, w27
+    lsl     w23, w23, #1
+    orr     w23, w23, w9
 
     mov     x0, x22
-    mov     w1, w27
-    blr     x24                     // learn_fn(model_ctx, bit)
+    mov     w1, w9
+    bl      _websqz_model_learn
 
-    subs    w26, w26, #1
+    subs    w24, w24, #1
     b.ne    2b
 
-    strb    w25, [x20], #1
+    strb    w23, [x20], #1
     subs    x21, x21, #1
     b       1b
 
 5:
-    ldp     x27, x28, [sp, #80]
-    ldp     x25, x26, [sp, #64]
     ldp     x23, x24, [sp, #48]
     ldp     x21, x22, [sp, #32]
     ldp     x19, x20, [sp, #16]
-    ldp     x29, x30, [sp], #96
+    ldp     x29, x30, [sp], #64
     ret

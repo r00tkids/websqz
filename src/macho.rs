@@ -29,6 +29,10 @@ pub struct Args {
     /// Output directory
     #[arg(short, long)]
     pub output_directory: String,
+
+    /// Enable verbose diagnostics in the generated decompressor
+    #[arg(long)]
+    pub diagnostics: bool,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -65,9 +69,14 @@ pub fn run(args: Args) -> Result<()> {
     fs::write(&out_path, &compressed_macho.compressed)
         .with_context(|| format!("Failed to write {}", out_path.display()))?;
 
-    let decompressor_path =
-        build::build_decompressor(&output_dir, &model_config, &out_path, &compressed_macho)
-            .context("Failed to build Mach-O decompressor")?;
+    let decompressor_path = build::build_decompressor(
+        &output_dir,
+        &model_config,
+        &out_path,
+        &compressed_macho,
+        args.diagnostics,
+    )
+    .context("Failed to build Mach-O decompressor")?;
 
     println!(
         "Compressed {} bytes -> {} bytes ({:.1}% of original)",

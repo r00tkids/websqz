@@ -26,26 +26,21 @@ _websqz_model_hash:
 .globl _websqz_probability_from_u24
 _websqz_probability_from_u24:
     // d0 = clamp((double)w0 / 0x00ffffff, eps, 1.0 - eps)
-    adrp    x9, L_websqz_u24_max_double@PAGE
-    add     x9, x9, L_websqz_u24_max_double@PAGEOFF
+    cbnz    w0, 1f
+    mov     w0, #1
+    b       2f
+1:
+    movz    w9, #0xffff
+    movk    w9, #0x00ff, lsl #16
+    cmp     w0, w9
+    b.ne    2f
+    sub     w0, w9, #1
+2:
+    adrp    x9, _websqz_u24_max_double@PAGE
+    add     x9, x9, _websqz_u24_max_double@PAGEOFF
     ucvtf   d0, w0
     ldr     d1, [x9]
     fdiv    d0, d0, d1
-
-    adrp    x9, L_websqz_prob_eps@PAGE
-    add     x9, x9, L_websqz_prob_eps@PAGEOFF
-    ldr     d1, [x9]
-    fcmp    d0, d1
-    b.ge    1f
-    fmov    d0, d1
-1:
-    adrp    x9, L_websqz_prob_one_minus_eps@PAGE
-    add     x9, x9, L_websqz_prob_one_minus_eps@PAGEOFF
-    ldr     d1, [x9]
-    fcmp    d0, d1
-    b.le    2f
-    fmov    d0, d1
-2:
     ret
 
 .globl _websqz_prob_stretch_u24
@@ -56,9 +51,7 @@ _websqz_prob_stretch_u24:
 
     bl      _websqz_probability_from_u24
     fmov    d2, d0
-    adrp    x9, L_websqz_one@PAGE
-    add     x9, x9, L_websqz_one@PAGEOFF
-    ldr     d1, [x9]
+    fmov    d1, #1.00000000
     fsub    d1, d1, d2
     fdiv    d0, d2, d1
     bl      _log
@@ -74,9 +67,7 @@ _websqz_prob_squash:
 
     fneg    d0, d0
     bl      _exp
-    adrp    x9, L_websqz_one@PAGE
-    add     x9, x9, L_websqz_one@PAGEOFF
-    ldr     d1, [x9]
+    fmov    d1, #1.00000000
     fadd    d0, d0, d1
     fdiv    d0, d1, d0
 
@@ -85,11 +76,6 @@ _websqz_prob_squash:
 
 .section __TEXT,__literal8,8byte_literals
 .p2align 3
-L_websqz_u24_max_double:
+.globl _websqz_u24_max_double
+_websqz_u24_max_double:
     .double 16777215.0
-L_websqz_prob_eps:
-    .double 0.000000059604648328104019
-L_websqz_prob_one_minus_eps:
-    .double 0.9999999403953517
-L_websqz_one:
-    .double 1.0

@@ -87,8 +87,8 @@ _websqz_norder_byte_learn:
     // prob += (U24_MAX * ((bit - prob/U24_MAX) / (count + 0.2))) as i32
     ucvtf   d0, w20
     ucvtf   d1, w25
-    adrp    x9, L_websqz_norder_u24_max_double@PAGE
-    add     x9, x9, L_websqz_norder_u24_max_double@PAGEOFF
+    adrp    x9, _websqz_u24_max_double@PAGE
+    add     x9, x9, _websqz_u24_max_double@PAGEOFF
     ldr     d2, [x9]
     fdiv    d1, d1, d2
     fsub    d0, d0, d1
@@ -191,7 +191,5 @@ _websqz_norder_byte_learn:
 
 .section __TEXT,__literal8,8byte_literals
 .p2align 3
-L_websqz_norder_u24_max_double:
-    .double 16777215.0
 L_websqz_norder_learning_bias:
     .double 0.2

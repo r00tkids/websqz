@@ -15,9 +15,6 @@
 .extern _websqz_compressed_end
 .extern _websqz_decode_chunks_start
 .extern _websqz_decode_chunks_end
-.extern _websqz_model_ctx
-.extern _websqz_model_predict
-.extern _websqz_model_learn
 .extern _websqz_prepare_image
 .extern _websqz_launch_image
 
@@ -59,12 +56,6 @@ _main:
     ldr     x2, [x24], #8           // chunk byte length
     add     x1, x19, x1
     mov     x0, x20
-    adrp    x3, _websqz_model_ctx@PAGE
-    add     x3, x3, _websqz_model_ctx@PAGEOFF
-    adrp    x4, _websqz_model_predict@PAGE
-    add     x4, x4, _websqz_model_predict@PAGEOFF
-    adrp    x5, _websqz_model_learn@PAGE
-    add     x5, x5, _websqz_model_learn@PAGEOFF
     bl      _arithmetic_decode_stream
     b       1b
 
@@ -74,9 +65,7 @@ _main:
     mov     x2, x22
     mov     x3, x23
     bl      _websqz_launch_image
-    mov     w26, w0
 
-    mov     w0, w26
     ldp     x25, x26, [sp, #64]
     ldp     x23, x24, [sp, #48]
     ldp     x21, x22, [sp, #32]

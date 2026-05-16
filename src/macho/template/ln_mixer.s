@@ -30,15 +30,6 @@
 .equ LNM_LAST_P,         72
 .equ LNM_SIZE,           80
 
-.globl _websqz_ln_mixer_predict
-_websqz_ln_mixer_predict:
-    stp     x29, x30, [sp, #-16]!
-    mov     x29, sp
-    bl      _websqz_ln_mixer_predict_stretched
-    bl      _websqz_prob_squash
-    ldp     x29, x30, [sp], #16
-    ret
-
 .globl _websqz_ln_mixer_predict_stretched
 _websqz_ln_mixer_predict_stretched:
     stp     x29, x30, [sp, #-32]!

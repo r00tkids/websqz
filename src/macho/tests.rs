@@ -143,6 +143,7 @@ fn full_decompressor_round_trip() {
     run(Args {
         input: binary_path.clone(),
         output_directory: output_dir.to_string_lossy().into_owned(),
+        diagnostics: false,
     })
     .expect("Failed to build full Mach-O decompressor");
 
@@ -150,6 +151,28 @@ fn full_decompressor_round_trip() {
         .output()
         .expect("Failed to run generated decompressor");
     assert_success("run generated decompressor", &run_output);
+    assert_eq!(run_output.stdout, b"Hello, World!\n");
+}
+
+#[test]
+fn full_decompressor_with_diagnostics_builds() {
+    if !cfg!(all(target_os = "macos", target_arch = "aarch64")) || !command_available("clang") {
+        return;
+    }
+
+    let binary_path = PathBuf::from("tests/macho/helloworld");
+    let output_dir = PathBuf::from("./testout/macho_full_decompressor_diagnostics");
+    run(Args {
+        input: binary_path,
+        output_directory: output_dir.to_string_lossy().into_owned(),
+        diagnostics: true,
+    })
+    .expect("Failed to build diagnostic Mach-O decompressor");
+
+    let run_output = Command::new(output_dir.join("decompressor"))
+        .output()
+        .expect("Failed to run diagnostic generated decompressor");
+    assert_success("run diagnostic generated decompressor", &run_output);
     assert_eq!(run_output.stdout, b"Hello, World!\n");
 }
 
@@ -517,7 +540,12 @@ _websqz_mixer_ctx_weights:
 .align 2
 .globl _websqz_model_predict
 _websqz_model_predict:
-    b       _websqz_ln_mixer_predict
+    stp     x29, x30, [sp, #-16]!
+    mov     x29, sp
+    bl      _websqz_ln_mixer_predict_stretched
+    bl      _websqz_prob_squash
+    ldp     x29, x30, [sp], #16
+    ret
 
 .globl _websqz_model_learn
 _websqz_model_learn:
