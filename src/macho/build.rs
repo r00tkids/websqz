@@ -76,6 +76,7 @@ pub(super) fn build_decompressor(
     command.arg("-fno-asynchronous-unwind-tables");
     command.arg("-Wl,-dead_strip");
     command.arg("-Wl,-x");
+    command.arg("-Wl,-no_data_const");
     for path in &source_paths {
         command.arg(path);
     }
