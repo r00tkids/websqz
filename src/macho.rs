@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 mod model;
 mod parser;
 
-use model::LoadCommand;
+use model::{FileType, Flags, LoadCommand, SegmentCommand};
 
 use crate::compressor::{
     compress_config::ModelConfig,
@@ -23,6 +23,13 @@ use crate::compressor::{
 const DEFAULT_NORDER_TABLE_POW2: u32 = 26;
 const NORDER_RECORD_BYTES: usize = 4;
 const MIXER_CONTEXT_ROWS: usize = 256 * 255;
+const DYLD_CHAINED_IMPORT: u32 = 1;
+const DYLD_CHAINED_PTR_64_OFFSET: u16 = 6;
+const DYLD_CHAINED_PTR_START_NONE: u16 = 0xffff;
+const DYLD_CHAINED_PTR_START_MULTI: u16 = 0x8000;
+const PAGE_SIZE: u64 = 0x4000;
+const FIXUP_KIND_REBASE: u32 = 0;
+const FIXUP_KIND_BIND: u32 = 1;
 
 const BOOTSTRAP_S: &str = include_str!("macho/template/bootstrap.s");
 const DECODER_S: &str = include_str!("macho/template/decoder.s");
@@ -53,7 +60,7 @@ pub fn run(args: Args) -> Result<()> {
         ))))
         .context("Failed to create compression model")?;
     let compressed_macho = compress_binary_with_model(&binary, model)?;
-    let total_uncompressed = compressed_macho.uncompressed.len();
+    let total_uncompressed = compressed_macho.uncompressed_len;
 
     println!(
         "Found {} segment(s) to compress ({} bytes total):",
@@ -76,13 +83,9 @@ pub fn run(args: Args) -> Result<()> {
     fs::write(&out_path, &compressed_macho.compressed)
         .with_context(|| format!("Failed to write {}", out_path.display()))?;
 
-    let decompressor_path = build_decompressor(
-        &output_dir,
-        &model_config,
-        &out_path,
-        compressed_macho.uncompressed.len(),
-    )
-    .context("Failed to build Mach-O decompressor")?;
+    let decompressor_path =
+        build_decompressor(&output_dir, &model_config, &out_path, &compressed_macho)
+            .context("Failed to build Mach-O decompressor")?;
 
     println!(
         "Compressed {} bytes -> {} bytes ({:.1}% of original)",
@@ -100,7 +103,7 @@ fn build_decompressor(
     output_dir: &Path,
     model_config: &ModelConfig,
     compressed_path: &Path,
-    output_len: usize,
+    packed: &CompressedMacho,
 ) -> Result<PathBuf> {
     if !command_available("clang") {
         bail!("clang is required to build the Mach-O decompressor");
@@ -119,13 +122,13 @@ fn build_decompressor(
         ("ln_mixer.s", LN_MIXER_S.to_owned()),
         (
             "payload.s",
-            render_payload_assembly(compressed_path, output_len),
+            render_payload_assembly(compressed_path, packed),
         ),
         (
             "model.s",
             render_model_assembly(model_config, DEFAULT_NORDER_TABLE_POW2)?,
         ),
-        ("after_decode.c", render_after_decode_c()),
+        ("runtime.c", render_runtime_c()),
     ];
 
     let mut source_paths = Vec::with_capacity(sources.len());
@@ -149,8 +152,8 @@ fn build_decompressor(
     Ok(decompressor_path)
 }
 
-fn render_payload_assembly(compressed_path: &Path, output_len: usize) -> String {
-    format!(
+fn render_payload_assembly(compressed_path: &Path, packed: &CompressedMacho) -> String {
+    let mut src = format!(
         r#".section __DATA,__const
 .p2align 3
 .globl _websqz_compressed_start
@@ -159,45 +162,222 @@ _websqz_compressed_start:
 .globl _websqz_compressed_end
 _websqz_compressed_end:
 
-.section __DATA,__bss
 .p2align 3
-.globl _websqz_output_start
-_websqz_output_start:
-.space {output_len}
-.globl _websqz_output_end
-_websqz_output_end:
+.globl _websqz_image_size
+_websqz_image_size:
+    .quad {image_size}
+.globl _websqz_entry_offset
+_websqz_entry_offset:
+    .quad {entry_offset}
+
+.p2align 3
+.globl _websqz_decode_chunks_start
+_websqz_decode_chunks_start:
 "#,
         compressed_path = escape_assembly_path(compressed_path),
-    )
+        image_size = packed.image_size,
+        entry_offset = packed.entry_offset,
+    );
+
+    for chunk in &packed.decode_chunks {
+        src.push_str(&format!(
+            "    .quad {offset}\n    .quad {size}\n",
+            offset = chunk.offset,
+            size = chunk.size,
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_decode_chunks_end
+_websqz_decode_chunks_end:
+
+.p2align 3
+.globl _websqz_segments_start
+_websqz_segments_start:
+"#,
+    );
+    for segment in &packed.segments {
+        src.push_str(&format!(
+            "    .quad {offset}\n    .quad {size}\n    .long {init_prot}\n    .long 0\n",
+            offset = segment.offset,
+            size = segment.vm_size,
+            init_prot = segment.init_prot,
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_segments_end
+_websqz_segments_end:
+
+.p2align 3
+.globl _websqz_imports_start
+_websqz_imports_start:
+"#,
+    );
+    for (i, import) in packed.imports.iter().enumerate() {
+        src.push_str(&format!(
+            "    .quad L_websqz_import_{i}\n    .long {weak}\n    .long 0\n",
+            weak = if import.weak { 1 } else { 0 },
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_imports_end
+_websqz_imports_end:
+"#,
+    );
+    for (i, import) in packed.imports.iter().enumerate() {
+        src.push_str(&format!(
+            "L_websqz_import_{i}:\n    .asciz \"{}\"\n",
+            escape_assembly_string(&import.name),
+        ));
+    }
+
+    src.push_str(
+        r#"
+.p2align 3
+.globl _websqz_fixups_start
+_websqz_fixups_start:
+"#,
+    );
+    for fixup in &packed.fixups {
+        src.push_str(&format!(
+            "    .quad {offset}\n    .quad {target}\n    .quad {addend}\n    .long {import_index}\n    .long {high8}\n    .long {kind}\n    .long 0\n",
+            offset = fixup.offset,
+            target = fixup.target,
+            addend = fixup.addend,
+            import_index = fixup.import_index,
+            high8 = fixup.high8,
+            kind = fixup.kind,
+        ));
+    }
+    src.push_str(
+        r#".globl _websqz_fixups_end
+_websqz_fixups_end:
+"#,
+    );
+    src
 }
 
-fn render_after_decode_c() -> String {
-    r#"#include <errno.h>
+fn render_runtime_c() -> String {
+    r#"#include <dlfcn.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
-void websqz_after_decode(uint8_t *output, uint64_t len, int argc, char **argv) {
-    const char *path = argc > 1 ? argv[1] : "decoded.bin";
-    FILE *file = fopen(path, "wb");
-    if (!file) {
-        fprintf(stderr, "failed to open %s: %s\n", path, strerror(errno));
+struct WebsqzSegment {
+    uint64_t offset;
+    uint64_t size;
+    uint32_t prot;
+    uint32_t reserved;
+};
+
+struct WebsqzImport {
+    const char *name;
+    uint32_t weak;
+    uint32_t reserved;
+};
+
+struct WebsqzFixup {
+    uint64_t offset;
+    uint64_t target;
+    uint64_t addend;
+    uint32_t import_index;
+    uint32_t high8;
+    uint32_t kind;
+    uint32_t reserved;
+};
+
+extern const uint64_t websqz_image_size;
+extern const uint64_t websqz_entry_offset;
+extern const struct WebsqzSegment websqz_segments_start[];
+extern const struct WebsqzSegment websqz_segments_end[];
+extern const struct WebsqzImport websqz_imports_start[];
+extern const struct WebsqzImport websqz_imports_end[];
+extern const struct WebsqzFixup websqz_fixups_start[];
+extern const struct WebsqzFixup websqz_fixups_end[];
+
+static uint64_t page_floor(uint64_t value, uint64_t page_size) {
+    return value & ~(page_size - 1);
+}
+
+static uint64_t page_ceil(uint64_t value, uint64_t page_size) {
+    return (value + page_size - 1) & ~(page_size - 1);
+}
+
+void *websqz_prepare_image(void) {
+    void *image = mmap(NULL, (size_t)websqz_image_size, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (image == MAP_FAILED) {
+        fprintf(stderr, "websqz: mmap failed: %s\n", strerror(errno));
+        exit(1);
+    }
+    return image;
+}
+
+static uintptr_t resolve_import(uint32_t index) {
+    size_t count = (size_t)(websqz_imports_end - websqz_imports_start);
+    if (index >= count) {
+        fprintf(stderr, "websqz: invalid import index %u\n", index);
         exit(1);
     }
 
-    size_t written = fwrite(output, 1, (size_t)len, file);
-    if (written != (size_t)len) {
-        fprintf(stderr, "failed to write %s: wrote %zu of %llu bytes\n",
-                path, written, (unsigned long long)len);
-        fclose(file);
-        exit(1);
+    const struct WebsqzImport *import = &websqz_imports_start[index];
+    const char *name = import->name;
+    if (name[0] == '_') {
+        name++;
     }
 
-    if (fclose(file) != 0) {
-        fprintf(stderr, "failed to close %s: %s\n", path, strerror(errno));
+    void *symbol = dlsym(RTLD_DEFAULT, name);
+    if (!symbol && !import->weak) {
+        fprintf(stderr, "websqz: dlsym(%s) failed: %s\n", name, dlerror());
         exit(1);
     }
+    return (uintptr_t)symbol;
+}
+
+static void apply_fixups(uint8_t *image) {
+    for (const struct WebsqzFixup *fixup = websqz_fixups_start;
+         fixup < websqz_fixups_end;
+         fixup++) {
+        uintptr_t *slot = (uintptr_t *)(image + fixup->offset);
+        if (fixup->kind == 1) {
+            *slot = resolve_import(fixup->import_index) + (uintptr_t)fixup->addend;
+        } else {
+            uintptr_t pointer = (uintptr_t)image + (uintptr_t)fixup->target;
+            pointer |= (uintptr_t)fixup->high8 << 56;
+            *slot = pointer;
+        }
+    }
+}
+
+static void protect_segments(uint8_t *image) {
+    uint64_t page_size = (uint64_t)getpagesize();
+    for (const struct WebsqzSegment *segment = websqz_segments_start;
+         segment < websqz_segments_end;
+         segment++) {
+        if (segment->size == 0) {
+            continue;
+        }
+
+        uint64_t start = page_floor(segment->offset, page_size);
+        uint64_t end = page_ceil(segment->offset + segment->size, page_size);
+        if (mprotect(image + start, (size_t)(end - start), (int)segment->prot) != 0) {
+            fprintf(stderr, "websqz: mprotect failed: %s\n", strerror(errno));
+            exit(1);
+        }
+    }
+}
+
+int websqz_launch_image(uint8_t *image, int argc, char **argv, char **envp) {
+    apply_fixups(image);
+    __builtin___clear_cache((char *)image, (char *)image + websqz_image_size);
+    protect_segments(image);
+
+    int (*entry)(int, char **, char **) =
+        (int (*)(int, char **, char **))(void *)(image + websqz_entry_offset);
+    return entry(argc, argv, envp);
 }
 "#
     .to_owned()
@@ -463,6 +643,14 @@ fn escape_assembly_path(path: &Path) -> String {
         .replace('"', "\\\"")
 }
 
+fn escape_assembly_string(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\0', "")
+}
+
 fn command_available(command: &str) -> bool {
     Command::new(command).arg("--version").output().is_ok()
 }
@@ -479,23 +667,55 @@ fn assert_command_success(action: &str, output: &Output) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 struct CompressedMacho {
     compressed: Vec<u8>,
     uncompressed: Vec<u8>,
-    segments: Vec<CompressedSegment>,
+    uncompressed_len: usize,
+    image_size: u64,
+    entry_offset: u64,
+    decode_chunks: Vec<DecodeChunk>,
+    segments: Vec<PackedSegment>,
+    imports: Vec<PackedImport>,
+    fixups: Vec<PackedFixup>,
 }
 
-struct CompressedSegment {
+#[derive(Debug)]
+struct PackedSegment {
     name: String,
     size: usize,
+    offset: u64,
+    vm_size: u64,
+    init_prot: u32,
+}
+
+#[derive(Debug)]
+struct DecodeChunk {
+    offset: u64,
+    size: usize,
+}
+
+#[derive(Debug)]
+struct PackedImport {
+    name: String,
+    weak: bool,
+}
+
+#[derive(Debug)]
+struct PackedFixup {
+    offset: u64,
+    target: u64,
+    addend: u64,
+    import_index: u32,
+    high8: u32,
+    kind: u32,
 }
 
 fn compress_binary_with_model(binary: &[u8], model: Box<dyn Model>) -> Result<CompressedMacho> {
     let macho = parser::parse(&binary)?;
+    validate_supported_macho(&macho)?;
 
-    // Collect code and data segments in file order, skipping segments with no
-    // file backing (__PAGEZERO has file_size == 0) and linker metadata (__LINKEDIT).
-    let mut segments: Vec<(u64, String, &[u8])> = macho
+    let macho_segments: Vec<&SegmentCommand> = macho
         .load_commands
         .iter()
         .filter_map(|lc| {
@@ -505,44 +725,383 @@ fn compress_binary_with_model(binary: &[u8], model: Box<dyn Model>) -> Result<Co
                 None
             }
         })
-        .filter(|seg| seg.file_size > 0 && seg.name != "__LINKEDIT")
-        .map(|seg| {
-            let start = seg.file_offset as usize;
-            let end = start + seg.file_size as usize;
-            let data = &binary[start..end];
-            (seg.file_offset, seg.name.clone(), data)
-        })
         .collect();
 
-    // Sort by file offset so we compress in on-disk order.
-    segments.sort_by_key(|(file_offset, _, _)| *file_offset);
-
-    if segments.is_empty() {
-        anyhow::bail!("No compressible segments found in the binary");
+    let image_segments: Vec<&SegmentCommand> = macho_segments
+        .iter()
+        .copied()
+        .filter(|seg| seg.vm_size > 0 && seg.name != "__PAGEZERO" && seg.name != "__LINKEDIT")
+        .collect();
+    if image_segments.is_empty() {
+        bail!("No loadable app segments found in the binary");
+    }
+    if !image_segments.iter().any(|seg| seg.name == "__TEXT") {
+        bail!("Unsupported Mach-O: missing __TEXT segment");
     }
 
-    let mut compressed: Vec<u8> = Vec::new();
-    let mut uncompressed: Vec<u8> = Vec::new();
-    let segment_summaries = segments
+    let min_vm_addr = image_segments
         .iter()
-        .map(|(_, name, data)| CompressedSegment {
-            name: name.clone(),
+        .map(|seg| seg.vm_addr)
+        .min()
+        .expect("image segments checked above");
+    let max_vm_addr = image_segments
+        .iter()
+        .map(|seg| seg.vm_addr.saturating_add(seg.vm_size))
+        .max()
+        .expect("image segments checked above");
+    let image_size = align_up(max_vm_addr - min_vm_addr, PAGE_SIZE);
+    let entry_offset = entry_offset(&macho, &macho_segments, min_vm_addr)?;
+
+    let mut decode_sources: Vec<(u64, u64, String, &[u8])> = Vec::new();
+    let mut packed_segments = Vec::new();
+    for seg in &image_segments {
+        let offset = seg.vm_addr - min_vm_addr;
+        packed_segments.push(PackedSegment {
+            name: seg.name.clone(),
+            size: seg.file_size as usize,
+            offset,
+            vm_size: seg.vm_size,
+            init_prot: seg.init_prot,
+        });
+
+        if seg.file_size == 0 {
+            continue;
+        }
+        let start = seg.file_offset as usize;
+        let end = start
+            .checked_add(seg.file_size as usize)
+            .context("Mach-O segment file range overflowed usize")?;
+        let data = binary
+            .get(start..end)
+            .with_context(|| format!("Segment {} extends past end of file", seg.name))?;
+        decode_sources.push((seg.file_offset, offset, seg.name.clone(), data));
+    }
+
+    decode_sources.sort_by_key(|(file_offset, _, _, _)| *file_offset);
+    let decode_chunks = decode_sources
+        .iter()
+        .map(|(_, offset, _, data)| DecodeChunk {
+            offset: *offset,
             size: data.len(),
         })
         .collect();
+
+    if decode_sources.is_empty() {
+        bail!("No compressible segments found in the binary");
+    }
+
+    let (imports, fixups) = parse_chained_fixups(binary, &macho, &macho_segments, min_vm_addr)?;
+
+    let mut compressed: Vec<u8> = Vec::new();
+    let mut uncompressed = Vec::with_capacity(
+        decode_sources
+            .iter()
+            .map(|(_, _, _, data)| data.len())
+            .sum(),
+    );
+    let mut uncompressed_len = 0usize;
     let mut encoder = Encoder::new(model, &mut compressed)?;
 
-    for (_, _, data) in &segments {
+    for (_, _, _, data) in &decode_sources {
         encoder.encode_section(*data)?;
         uncompressed.extend_from_slice(data);
+        uncompressed_len += data.len();
     }
     encoder.finish()?;
 
     Ok(CompressedMacho {
         compressed,
         uncompressed,
-        segments: segment_summaries,
+        uncompressed_len,
+        image_size,
+        entry_offset,
+        decode_chunks,
+        segments: packed_segments,
+        imports,
+        fixups,
     })
+}
+
+fn validate_supported_macho(macho: &model::MachoFile) -> Result<()> {
+    if macho.header.file_type != FileType::Execute {
+        bail!("Unsupported Mach-O: expected MH_EXECUTE");
+    }
+    if !macho.header.flags.contains(Flags::PIE) {
+        bail!("Unsupported Mach-O: only PIE executables are supported");
+    }
+    if !macho
+        .load_commands
+        .iter()
+        .any(|lc| matches!(lc, LoadCommand::EntryPoint(_)))
+    {
+        bail!("Unsupported Mach-O: missing LC_MAIN entry point");
+    }
+    for lc in &macho.load_commands {
+        if let LoadCommand::DyldInfo(info) = lc {
+            if info.rebase_size != 0
+                || info.bind_size != 0
+                || info.weak_bind_size != 0
+                || info.lazy_bind_size != 0
+            {
+                bail!("Unsupported Mach-O: classic LC_DYLD_INFO fixups are not supported");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn entry_offset(
+    macho: &model::MachoFile,
+    segments: &[&SegmentCommand],
+    min_vm_addr: u64,
+) -> Result<u64> {
+    let entry_file_offset = macho
+        .load_commands
+        .iter()
+        .find_map(|lc| {
+            if let LoadCommand::EntryPoint(entry) = lc {
+                Some(entry.entry_offset)
+            } else {
+                None
+            }
+        })
+        .context("Unsupported Mach-O: missing LC_MAIN entry point")?;
+
+    let entry_segment = segments
+        .iter()
+        .find(|seg| {
+            entry_file_offset >= seg.file_offset
+                && entry_file_offset < seg.file_offset.saturating_add(seg.file_size)
+        })
+        .context("Unsupported Mach-O: LC_MAIN entry point is outside file-backed segments")?;
+
+    Ok(entry_segment.vm_addr + (entry_file_offset - entry_segment.file_offset) - min_vm_addr)
+}
+
+fn parse_chained_fixups(
+    binary: &[u8],
+    macho: &model::MachoFile,
+    segments: &[&SegmentCommand],
+    min_vm_addr: u64,
+) -> Result<(Vec<PackedImport>, Vec<PackedFixup>)> {
+    let Some(command) = macho.load_commands.iter().find_map(|lc| {
+        if let LoadCommand::ChainedFixups(command) = lc {
+            Some(command)
+        } else {
+            None
+        }
+    }) else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+
+    let blob_start = command.data_offset as usize;
+    let blob_end = blob_start
+        .checked_add(command.data_size as usize)
+        .context("LC_DYLD_CHAINED_FIXUPS range overflowed usize")?;
+    let blob = binary
+        .get(blob_start..blob_end)
+        .context("LC_DYLD_CHAINED_FIXUPS extends past end of file")?;
+
+    let fixups_version = read_u32_at(blob, 0)?;
+    let starts_offset = read_u32_at(blob, 4)? as usize;
+    let imports_offset = read_u32_at(blob, 8)? as usize;
+    let symbols_offset = read_u32_at(blob, 12)? as usize;
+    let imports_count = read_u32_at(blob, 16)? as usize;
+    let imports_format = read_u32_at(blob, 20)?;
+    let symbols_format = read_u32_at(blob, 24)?;
+
+    if fixups_version != 0 {
+        bail!("Unsupported chained fixups version {fixups_version}");
+    }
+    if imports_format != DYLD_CHAINED_IMPORT {
+        bail!("Unsupported chained imports format {imports_format}");
+    }
+    if symbols_format != 0 {
+        bail!("Unsupported compressed chained import symbol table");
+    }
+
+    let imports = parse_chained_imports(blob, imports_offset, symbols_offset, imports_count)?;
+    let fixups =
+        parse_chained_starts(blob, starts_offset, segments, min_vm_addr, binary, &imports)?;
+
+    Ok((imports, fixups))
+}
+
+fn parse_chained_imports(
+    blob: &[u8],
+    imports_offset: usize,
+    symbols_offset: usize,
+    imports_count: usize,
+) -> Result<Vec<PackedImport>> {
+    let mut imports = Vec::with_capacity(imports_count);
+    for i in 0..imports_count {
+        let raw = read_u32_at(blob, imports_offset + i * size_of::<u32>())?;
+        let weak = ((raw >> 8) & 1) != 0;
+        let name_offset = (raw >> 9) as usize;
+        let name = read_null_terminated(blob, symbols_offset + name_offset)
+            .with_context(|| format!("Invalid chained import symbol name at index {i}"))?;
+        imports.push(PackedImport { name, weak });
+    }
+    Ok(imports)
+}
+
+fn parse_chained_starts(
+    blob: &[u8],
+    starts_offset: usize,
+    segments: &[&SegmentCommand],
+    min_vm_addr: u64,
+    binary: &[u8],
+    imports: &[PackedImport],
+) -> Result<Vec<PackedFixup>> {
+    let seg_count = read_u32_at(blob, starts_offset)? as usize;
+    if seg_count > segments.len() {
+        bail!(
+            "Chained fixups reference {seg_count} segments, but Mach-O has only {}",
+            segments.len()
+        );
+    }
+
+    let mut fixups = Vec::new();
+    for segment_index in 0..seg_count {
+        let seg_info_offset = read_u32_at(blob, starts_offset + 4 + segment_index * 4)? as usize;
+        if seg_info_offset == 0 {
+            continue;
+        }
+
+        let seg = segments[segment_index];
+        let starts = starts_offset + seg_info_offset;
+        let _size = read_u32_at(blob, starts)?;
+        let page_size = read_u16_at(blob, starts + 4)? as u64;
+        let pointer_format = read_u16_at(blob, starts + 6)?;
+        let segment_offset = read_u64_at(blob, starts + 8)?;
+        let _max_valid_pointer = read_u32_at(blob, starts + 16)?;
+        let page_count = read_u16_at(blob, starts + 20)? as usize;
+
+        if pointer_format != DYLD_CHAINED_PTR_64_OFFSET {
+            bail!(
+                "Unsupported chained pointer format {pointer_format} in segment {}",
+                seg.name
+            );
+        }
+        let expected_segment_offset = seg.vm_addr - min_vm_addr;
+        if segment_offset != expected_segment_offset {
+            bail!(
+                "Unsupported chained fixup segment offset for {}: got {segment_offset:#x}, expected {expected_segment_offset:#x}",
+                seg.name
+            );
+        }
+
+        for page_index in 0..page_count {
+            let page_start = read_u16_at(blob, starts + 22 + page_index * 2)?;
+            if page_start == DYLD_CHAINED_PTR_START_NONE {
+                continue;
+            }
+            if (page_start & DYLD_CHAINED_PTR_START_MULTI) != 0 {
+                bail!("Unsupported chained fixups with multiple starts per page");
+            }
+
+            let mut fixup_offset =
+                segment_offset + page_index as u64 * page_size + page_start as u64;
+            loop {
+                let raw = read_u64_at(
+                    binary,
+                    file_offset_for_image_offset(segments, min_vm_addr, fixup_offset)?,
+                )?;
+                let bind = (raw >> 63) != 0;
+                let next = (raw >> 51) & 0x0fff;
+
+                if bind {
+                    let import_index = (raw & 0x00ff_ffff) as u32;
+                    if import_index as usize >= imports.len() {
+                        bail!("Chained fixup references invalid import index {import_index}");
+                    }
+                    let addend = (raw >> 24) & 0xff;
+                    fixups.push(PackedFixup {
+                        offset: fixup_offset,
+                        target: 0,
+                        addend,
+                        import_index,
+                        high8: 0,
+                        kind: FIXUP_KIND_BIND,
+                    });
+                } else {
+                    fixups.push(PackedFixup {
+                        offset: fixup_offset,
+                        target: raw & 0x0000_000f_ffff_ffff,
+                        addend: 0,
+                        import_index: 0,
+                        high8: ((raw >> 36) & 0xff) as u32,
+                        kind: FIXUP_KIND_REBASE,
+                    });
+                }
+
+                if next == 0 {
+                    break;
+                }
+                fixup_offset = fixup_offset
+                    .checked_add(next * 4)
+                    .context("Chained fixup offset overflowed")?;
+            }
+        }
+    }
+
+    Ok(fixups)
+}
+
+fn file_offset_for_image_offset(
+    segments: &[&SegmentCommand],
+    min_vm_addr: u64,
+    image_offset: u64,
+) -> Result<usize> {
+    for seg in segments {
+        if seg.name == "__PAGEZERO" || seg.name == "__LINKEDIT" || seg.file_size == 0 {
+            continue;
+        }
+        let start = seg.vm_addr - min_vm_addr;
+        let end = start + seg.file_size;
+        if image_offset >= start && image_offset + size_of::<u64>() as u64 <= end {
+            return Ok((seg.file_offset + (image_offset - start)) as usize);
+        }
+    }
+    bail!("Chained fixup at image offset {image_offset:#x} is outside file-backed segments")
+}
+
+fn read_u16_at(data: &[u8], offset: usize) -> Result<u16> {
+    let bytes = data
+        .get(offset..offset + 2)
+        .with_context(|| format!("unexpected end of data at offset {offset}"))?;
+    Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
+}
+
+fn read_u32_at(data: &[u8], offset: usize) -> Result<u32> {
+    let bytes = data
+        .get(offset..offset + 4)
+        .with_context(|| format!("unexpected end of data at offset {offset}"))?;
+    Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+fn read_u64_at(data: &[u8], offset: usize) -> Result<u64> {
+    let bytes = data
+        .get(offset..offset + 8)
+        .with_context(|| format!("unexpected end of data at offset {offset}"))?;
+    Ok(u64::from_le_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+    ]))
+}
+
+fn read_null_terminated(data: &[u8], offset: usize) -> Result<String> {
+    let bytes = data
+        .get(offset..)
+        .with_context(|| format!("unexpected end of data at offset {offset}"))?;
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .context("unterminated string")?;
+    Ok(String::from_utf8_lossy(&bytes[..end]).into_owned())
+}
+
+fn align_up(value: u64, align: u64) -> u64 {
+    (value + align - 1) & !(align - 1)
 }
 
 #[cfg(test)]
@@ -689,26 +1248,84 @@ mod tests {
         })
         .expect("Failed to build full Mach-O decompressor");
 
-        let decoded_path = output_dir.join("decoded_segments.bin");
         let run_output = Command::new(output_dir.join("decompressor"))
-            .arg(&decoded_path)
             .output()
             .expect("Failed to run generated decompressor");
         assert_success("run generated decompressor", &run_output);
+        assert_eq!(run_output.stdout, b"Hello, World!\n");
+    }
 
-        let binary = fs::read(binary_path).expect("Failed to read Mach-O fixture");
-        let model_config = create_default_model_config();
-        let model = model_config
-            .create_model(Rc::new(RefCell::new(HashTable::<NOrderByteData>::new(
-                DEFAULT_NORDER_TABLE_POW2,
-            ))))
-            .expect("Failed to create default model");
-        let expected = compress_binary_with_model(&binary, model)
-            .expect("Failed to collect expected decoded bytes")
-            .uncompressed;
-        let decoded = fs::read(decoded_path).expect("Failed to read decoded output");
+    #[test]
+    fn packed_macho_metadata_for_helloworld() {
+        let binary = fs::read("tests/macho/helloworld").expect("Failed to read Mach-O fixture");
+        let packed = compress_binary_with_model(&binary, Box::new(HalfModel))
+            .expect("Failed to pack Mach-O fixture");
 
-        assert_eq!(decoded, expected);
+        assert_eq!(packed.image_size, 0x8000);
+        assert_eq!(packed.entry_offset, 0x460);
+        assert_eq!(packed.uncompressed_len, 0x8000);
+
+        assert_eq!(packed.segments.len(), 2);
+        assert_eq!(packed.segments[0].name, "__TEXT");
+        assert_eq!(packed.segments[0].offset, 0);
+        assert_eq!(packed.segments[0].vm_size, 0x4000);
+        assert_eq!(packed.segments[0].init_prot, 5);
+        assert_eq!(packed.segments[1].name, "__DATA_CONST");
+        assert_eq!(packed.segments[1].offset, 0x4000);
+        assert_eq!(packed.segments[1].vm_size, 0x4000);
+
+        assert_eq!(packed.decode_chunks.len(), 2);
+        assert_eq!(packed.decode_chunks[0].offset, 0);
+        assert_eq!(packed.decode_chunks[0].size, 0x4000);
+        assert_eq!(packed.decode_chunks[1].offset, 0x4000);
+        assert_eq!(packed.decode_chunks[1].size, 0x4000);
+
+        assert_eq!(packed.imports.len(), 1);
+        assert_eq!(packed.imports[0].name, "_printf");
+        assert!(!packed.imports[0].weak);
+
+        assert_eq!(packed.fixups.len(), 1);
+        assert_eq!(packed.fixups[0].kind, FIXUP_KIND_BIND);
+        assert_eq!(packed.fixups[0].offset, 0x4000);
+        assert_eq!(packed.fixups[0].import_index, 0);
+    }
+
+    #[test]
+    fn rejects_missing_lc_main() {
+        let mut binary = fs::read("tests/macho/helloworld").expect("Failed to read Mach-O fixture");
+        patch_load_command(&mut binary, 0x8000_0028, 0x1b);
+
+        let err = compress_binary_with_model(&binary, Box::new(HalfModel))
+            .expect_err("binary without LC_MAIN should be rejected");
+        assert!(format!("{err:#}").contains("missing LC_MAIN"));
+    }
+
+    #[test]
+    fn rejects_unsupported_chained_pointer_format() {
+        let mut binary = fs::read("tests/macho/helloworld").expect("Failed to read Mach-O fixture");
+        let macho = parser::parse(&binary).expect("Failed to parse Mach-O fixture");
+        let fixups = macho
+            .load_commands
+            .iter()
+            .find_map(|lc| {
+                if let LoadCommand::ChainedFixups(fixups) = lc {
+                    Some(fixups)
+                } else {
+                    None
+                }
+            })
+            .expect("LC_DYLD_CHAINED_FIXUPS not found");
+        let blob_start = fixups.data_offset as usize;
+        let starts_offset = read_u32_at(&binary, blob_start + 4).unwrap() as usize;
+        let seg_info_offset =
+            read_u32_at(&binary, blob_start + starts_offset + 4 + 2 * 4).unwrap() as usize;
+        let pointer_format_offset = blob_start + starts_offset + seg_info_offset + 6;
+        binary[pointer_format_offset..pointer_format_offset + 2]
+            .copy_from_slice(&2u16.to_le_bytes());
+
+        let err = compress_binary_with_model(&binary, Box::new(HalfModel))
+            .expect_err("unsupported chained pointer format should be rejected");
+        assert!(format!("{err:#}").contains("Unsupported chained pointer format"));
     }
 
     fn run_assembly_model_round_trip(
@@ -774,6 +1391,22 @@ mod tests {
         Command::new(command).arg("--version").output().is_ok()
     }
 
+    fn patch_load_command(binary: &mut [u8], old_cmd: u32, new_cmd: u32) {
+        let ncmds = u32::from_le_bytes(binary[16..20].try_into().unwrap()) as usize;
+        let mut offset = 32usize;
+        for _ in 0..ncmds {
+            let cmd = u32::from_le_bytes(binary[offset..offset + 4].try_into().unwrap());
+            let cmdsize =
+                u32::from_le_bytes(binary[offset + 4..offset + 8].try_into().unwrap()) as usize;
+            if cmd == old_cmd {
+                binary[offset..offset + 4].copy_from_slice(&new_cmd.to_le_bytes());
+                return;
+            }
+            offset += cmdsize;
+        }
+        panic!("load command {old_cmd:#x} not found");
+    }
+
     fn render_payload_assembly(
         compressed_path: &Path,
         expected_path: &Path,
@@ -795,13 +1428,39 @@ _websqz_expected_start:
 .globl _websqz_expected_end
 _websqz_expected_end:
 
-.section __DATA,__data
 .p2align 3
-.globl _websqz_output_start
-_websqz_output_start:
-.space {output_len}
-.globl _websqz_output_end
-_websqz_output_end:
+.globl _websqz_image_size
+_websqz_image_size:
+    .quad {output_len}
+.globl _websqz_entry_offset
+_websqz_entry_offset:
+    .quad 0
+
+.p2align 3
+.globl _websqz_decode_chunks_start
+_websqz_decode_chunks_start:
+    .quad 0
+    .quad {output_len}
+.globl _websqz_decode_chunks_end
+_websqz_decode_chunks_end:
+
+.p2align 3
+.globl _websqz_segments_start
+_websqz_segments_start:
+.globl _websqz_segments_end
+_websqz_segments_end:
+
+.p2align 3
+.globl _websqz_imports_start
+_websqz_imports_start:
+.globl _websqz_imports_end
+_websqz_imports_end:
+
+.p2align 3
+.globl _websqz_fixups_start
+_websqz_fixups_start:
+.globl _websqz_fixups_end
+_websqz_fixups_end:
 "#,
             compressed_path = escape_assembly_path(compressed_path),
             expected_path = escape_assembly_path(expected_path),
@@ -1003,6 +1662,7 @@ _websqz_model_learn:
 
 extern const uint8_t websqz_expected_start[];
 extern const uint8_t websqz_expected_end[];
+extern const uint64_t websqz_image_size;
 
 uintptr_t websqz_model_ctx;
 
@@ -1016,13 +1676,25 @@ void websqz_model_learn(void *ctx, uint32_t bit) {
     (void)bit;
 }
 
-void websqz_after_decode(uint8_t *output, uint64_t len) {
+void *websqz_prepare_image(void) {
+    uint8_t *output = calloc(1, (size_t)websqz_image_size);
+    if (!output) {
+        fprintf(stderr, "calloc failed\n");
+        exit(1);
+    }
+    return output;
+}
+
+int websqz_launch_image(uint8_t *output, int argc, char **argv, char **envp) {
+    (void)argc;
+    (void)argv;
+    (void)envp;
     const uint8_t *expected = websqz_expected_start;
     size_t expected_len = (size_t)(websqz_expected_end - websqz_expected_start);
 
-    if (len != expected_len) {
+    if ((size_t)websqz_image_size != expected_len) {
         fprintf(stderr, "decoded length mismatch: got %llu, expected %zu\n",
-                (unsigned long long)len, expected_len);
+                (unsigned long long)websqz_image_size, expected_len);
         exit(1);
     }
 
@@ -1037,6 +1709,8 @@ void websqz_after_decode(uint8_t *output, uint64_t len) {
         }
         exit(1);
     }
+    free(output);
+    return 0;
 }
 "#;
 
@@ -1048,14 +1722,27 @@ void websqz_after_decode(uint8_t *output, uint64_t len) {
 
 extern const uint8_t websqz_expected_start[];
 extern const uint8_t websqz_expected_end[];
+extern const uint64_t websqz_image_size;
 
-void websqz_after_decode(uint8_t *output, uint64_t len) {
+void *websqz_prepare_image(void) {
+    uint8_t *output = calloc(1, (size_t)websqz_image_size);
+    if (!output) {
+        fprintf(stderr, "calloc failed\n");
+        exit(1);
+    }
+    return output;
+}
+
+int websqz_launch_image(uint8_t *output, int argc, char **argv, char **envp) {
+    (void)argc;
+    (void)argv;
+    (void)envp;
     const uint8_t *expected = websqz_expected_start;
     size_t expected_len = (size_t)(websqz_expected_end - websqz_expected_start);
 
-    if (len != expected_len) {
+    if ((size_t)websqz_image_size != expected_len) {
         fprintf(stderr, "decoded length mismatch: got %llu, expected %zu\n",
-                (unsigned long long)len, expected_len);
+                (unsigned long long)websqz_image_size, expected_len);
         exit(1);
     }
 
@@ -1070,6 +1757,8 @@ void websqz_after_decode(uint8_t *output, uint64_t len) {
         }
         exit(1);
     }
+    free(output);
+    return 0;
 }
 "#;
 }

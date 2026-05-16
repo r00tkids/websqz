@@ -12,6 +12,7 @@ const LC_CODE_SIGNATURE: u32 = 0x1d;
 const LC_DYLD_INFO: u32 = 0x22;
 const LC_DYLD_INFO_ONLY: u32 = 0x8000_0022;
 const LC_MAIN: u32 = 0x8000_0028;
+const LC_DYLD_CHAINED_FIXUPS: u32 = 0x8000_0034;
 
 const CPU_TYPE_ARM64: u32 = 0x0100_000C;
 
@@ -77,6 +78,7 @@ fn parse_load_commands(r: &mut Reader, ncmds: u32) -> Result<Vec<LoadCommand>> {
             LC_DYLD_INFO | LC_DYLD_INFO_ONLY => parse_dyld_info(&mut pr)?,
             LC_UUID => parse_uuid(&mut pr)?,
             LC_MAIN => parse_entry_point(&mut pr)?,
+            LC_DYLD_CHAINED_FIXUPS => parse_chained_fixups(&mut pr)?,
             LC_CODE_SIGNATURE => parse_link_edit_data(&mut pr)?,
             _ => LoadCommand::Raw {
                 cmd,
@@ -152,7 +154,10 @@ fn parse_dyld_info(r: &mut Reader) -> Result<LoadCommand> {
     let rebase_size = r.read_u32()?;
     let bind_offset = r.read_u32()?;
     let bind_size = r.read_u32()?;
-    r.skip(16)?; // weak_bind + lazy_bind (2 × 8 bytes)
+    let weak_bind_offset = r.read_u32()?;
+    let weak_bind_size = r.read_u32()?;
+    let lazy_bind_offset = r.read_u32()?;
+    let lazy_bind_size = r.read_u32()?;
     let export_offset = r.read_u32()?;
     let export_size = r.read_u32()?;
     Ok(LoadCommand::DyldInfo(DyldInfoCommand {
@@ -160,6 +165,10 @@ fn parse_dyld_info(r: &mut Reader) -> Result<LoadCommand> {
         rebase_size,
         bind_offset,
         bind_size,
+        weak_bind_offset,
+        weak_bind_size,
+        lazy_bind_offset,
+        lazy_bind_size,
         export_offset,
         export_size,
     }))
@@ -178,6 +187,13 @@ fn parse_entry_point(r: &mut Reader) -> Result<LoadCommand> {
 
 fn parse_link_edit_data(r: &mut Reader) -> Result<LoadCommand> {
     Ok(LoadCommand::CodeSignature(LinkEditDataCommand {
+        data_offset: r.read_u32()?,
+        data_size: r.read_u32()?,
+    }))
+}
+
+fn parse_chained_fixups(r: &mut Reader) -> Result<LoadCommand> {
+    Ok(LoadCommand::ChainedFixups(LinkEditDataCommand {
         data_offset: r.read_u32()?,
         data_size: r.read_u32()?,
     }))
@@ -303,5 +319,19 @@ mod tests {
             .iter()
             .any(|lc| matches!(lc, LoadCommand::CodeSignature(_)));
         assert!(has_code_sig);
+
+        let chained_fixups = macho
+            .load_commands
+            .iter()
+            .find_map(|lc| {
+                if let LoadCommand::ChainedFixups(fixups) = lc {
+                    Some(fixups)
+                } else {
+                    None
+                }
+            })
+            .expect("LC_DYLD_CHAINED_FIXUPS load command not found");
+        assert_eq!(chained_fixups.data_offset, 32768);
+        assert_eq!(chained_fixups.data_size, 96);
     }
 }

@@ -57,6 +57,7 @@ pub enum LoadCommand {
     DyldInfo(DyldInfoCommand),
     Uuid([u8; 16]),
     EntryPoint(EntryPointCommand),
+    ChainedFixups(LinkEditDataCommand),
     CodeSignature(LinkEditDataCommand),
     Raw { cmd: u32, data: Vec<u8> },
 }
@@ -94,6 +95,10 @@ pub struct DyldInfoCommand {
     pub rebase_size: u32,
     pub bind_offset: u32,
     pub bind_size: u32,
+    pub weak_bind_offset: u32,
+    pub weak_bind_size: u32,
+    pub lazy_bind_offset: u32,
+    pub lazy_bind_size: u32,
     pub export_offset: u32,
     pub export_size: u32,
 }
