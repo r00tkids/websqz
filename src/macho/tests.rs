@@ -184,7 +184,7 @@ fn packed_macho_metadata_for_helloworld() {
 
     assert_eq!(packed.image_size, 0x8000);
     assert_eq!(packed.entry_offset, 0x460);
-    assert_eq!(packed.uncompressed_len, 0x8000);
+    assert_eq!(packed.uncompressed.len(), 0x8000);
 
     assert_eq!(packed.segments.len(), 2);
     assert_eq!(packed.segments[0].name, "__TEXT");
