@@ -36,8 +36,15 @@ extern const struct rootsqzImport rootsqz_imports_end[];
 extern const struct rootsqzFixup rootsqz_fixups_start[];
 extern const struct rootsqzFixup rootsqz_fixups_end[];
 
-static void fail(void) {
-    _exit(1);
+__attribute__((noreturn)) static void fail(void) {
+    __asm__ volatile(
+        "mov x0, #1\n"
+        "mov x16, #1\n"
+        "svc #0x80\n"
+        :
+        :
+        : "x0", "x16", "memory");
+    __builtin_unreachable();
 }
 
 static uint64_t page_floor(uint64_t value, uint64_t page_size) {
