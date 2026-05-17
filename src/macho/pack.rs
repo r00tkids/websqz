@@ -14,7 +14,6 @@ const PAGE_SIZE: u64 = 0x4000;
 pub(super) struct CompressedMacho {
     pub(super) compressed: Vec<u8>,
     pub(super) uncompressed: Vec<u8>,
-    pub(super) uncompressed_len: usize,
     pub(super) image_size: u64,
     pub(super) entry_offset: u64,
     pub(super) decode_chunks: Vec<DecodeChunk>,
@@ -142,7 +141,6 @@ pub(super) fn compress_binary_with_model(
     Ok(CompressedMacho {
         compressed,
         uncompressed,
-        uncompressed_len,
         image_size,
         entry_offset,
         decode_chunks,

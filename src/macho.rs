@@ -46,7 +46,7 @@ pub fn run(args: Args) -> Result<()> {
         ))))
         .context("Failed to create compression model")?;
     let compressed_macho = pack::compress_binary_with_model(&binary, model)?;
-    let total_uncompressed = compressed_macho.uncompressed_len;
+    let total_uncompressed = compressed_macho.uncompressed.len();
 
     println!(
         "Found {} segment(s) to compress ({} bytes total):",
