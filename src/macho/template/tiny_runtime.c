@@ -1,4 +1,3 @@
-#include <dlfcn.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -21,7 +20,7 @@ struct rootsqzSegment {
 };
 
 struct rootsqzImport {
-    const char *name;
+    uintptr_t address;
     uint32_t weak;
     uint32_t reserved;
 };
@@ -156,13 +155,10 @@ static uintptr_t resolve_import(uint32_t index) {
     }
 
     const struct rootsqzImport *import = &rootsqz_imports_start[index];
-    const char *name = import->name;
-
-    void *symbol = dlsym(RTLD_DEFAULT, name);
-    if (!symbol && !import->weak) {
+    if (import->address == 0 && !import->weak) {
         fail();
     }
-    return (uintptr_t)symbol;
+    return import->address;
 }
 
 static void apply_fixups(uint8_t *image) {

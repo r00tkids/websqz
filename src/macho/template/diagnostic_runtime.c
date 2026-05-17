@@ -1,4 +1,3 @@
-#include <dlfcn.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,7 +14,7 @@ struct rootsqzSegment {
 };
 
 struct rootsqzImport {
-    const char *name;
+    uintptr_t address;
     uint32_t weak;
     uint32_t reserved;
 };
@@ -65,14 +64,11 @@ static uintptr_t resolve_import(uint32_t index) {
     }
 
     const struct rootsqzImport *import = &rootsqz_imports_start[index];
-    const char *name = import->name;
-
-    void *symbol = dlsym(RTLD_DEFAULT, name);
-    if (!symbol && !import->weak) {
-        fprintf(stderr, "rootsqz: dlsym(%s) failed: %s\n", name, dlerror());
+    if (import->address == 0 && !import->weak) {
+        fprintf(stderr, "rootsqz: import %u resolved to null\n", index);
         exit(1);
     }
-    return (uintptr_t)symbol;
+    return import->address;
 }
 
 static void apply_fixups(uint8_t *image) {

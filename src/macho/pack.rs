@@ -19,6 +19,7 @@ pub struct CompressedMacho {
     pub decode_chunks: Vec<DecodeChunk>,
     pub segments: Vec<PackedSegment>,
     pub imports: Vec<PackedImport>,
+    pub dylibs: Vec<String>,
     pub fixups: Vec<PackedFixup>,
 }
 
@@ -120,6 +121,17 @@ pub fn compress_binary_with_model(binary: &[u8], model: Box<dyn Model>) -> Resul
     for import in &mut imports {
         import.name = strip_macho_symbol_prefix(&import.name).to_owned();
     }
+    let dylibs = macho
+        .load_commands
+        .iter()
+        .filter_map(|lc| {
+            if let LoadCommand::Dylib(dylib) = lc {
+                Some(dylib.name.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
 
     let mut compressed: Vec<u8> = Vec::new();
     let mut uncompressed = Vec::with_capacity(
@@ -144,6 +156,7 @@ pub fn compress_binary_with_model(binary: &[u8], model: Box<dyn Model>) -> Resul
         decode_chunks,
         segments: packed_segments,
         imports,
+        dylibs,
         fixups,
     })
 }

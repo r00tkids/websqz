@@ -96,6 +96,7 @@ pub fn build_decompressor(
     command.arg("-Wl,-no_source_version");
     command.arg("-Wl,-no_data_in_code_info");
     command.arg("-Wl,-no_compact_unwind");
+    append_import_dylibs(&mut command, &packed.dylibs)?;
     for path in &source_paths {
         command.arg(path);
     }
@@ -163,6 +164,52 @@ fn render_diagnostic_runtime_c() -> String {
 
 fn strip_decompressor(path: &Path) {
     let _ = Command::new("strip").arg(path).output();
+}
+
+fn append_import_dylibs(command: &mut Command, dylibs: &[String]) -> Result<()> {
+    let mut linked = Vec::new();
+    for dylib in dylibs {
+        if linked.iter().any(|linked| linked == dylib) {
+            continue;
+        }
+        linked.push(dylib.clone());
+
+        if dylib == "/usr/lib/libSystem.B.dylib" {
+            continue;
+        }
+
+        if let Some(framework) = framework_name(dylib) {
+            command.arg("-framework").arg(framework);
+            continue;
+        }
+
+        if let Some(library) = usr_lib_name(dylib) {
+            command.arg(format!("-l{library}"));
+            continue;
+        }
+
+        if dylib.starts_with('/') && Path::new(dylib).exists() {
+            command.arg(dylib);
+            continue;
+        }
+
+        bail!("Unsupported imported dylib path for Mach-O decompressor: {dylib}");
+    }
+    Ok(())
+}
+
+fn framework_name(dylib: &str) -> Option<String> {
+    dylib
+        .split('/')
+        .find_map(|component| component.strip_suffix(".framework"))
+        .map(ToOwned::to_owned)
+}
+
+fn usr_lib_name(dylib: &str) -> Option<String> {
+    let filename = dylib.strip_prefix("/usr/lib/")?;
+    let stem = filename.strip_suffix(".dylib")?;
+    let name = stem.strip_prefix("lib")?;
+    Some(name.split('.').next().unwrap_or(name).to_owned())
 }
 
 fn write_wrapper_script(native_path: &Path, wrapper_path: &Path) -> Result<()> {

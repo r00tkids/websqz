@@ -62,9 +62,18 @@ _rootsqz_segments_end:
 _rootsqz_imports_start:
 "#,
     );
-    for (i, import) in packed.imports.iter().enumerate() {
+    for import in &packed.imports {
+        if import.weak {
+            src.push_str(&format!(
+                ".weak_reference {}\n",
+                macho_external_symbol(&import.name),
+            ));
+        }
+    }
+    for import in &packed.imports {
         src.push_str(&format!(
-            "    .quad L_rootsqz_import_{i}\n    .long {weak}\n    .long 0\n",
+            "    .quad {}\n    .long {weak}\n    .long 0\n",
+            macho_external_symbol(&import.name),
             weak = if import.weak { 1 } else { 0 },
         ));
     }
@@ -73,12 +82,6 @@ _rootsqz_imports_start:
 _rootsqz_imports_end:
 "#,
     );
-    for (i, import) in packed.imports.iter().enumerate() {
-        src.push_str(&format!(
-            "L_rootsqz_import_{i}:\n    .asciz \"{}\"\n",
-            escape_assembly_string(&import.name),
-        ));
-    }
 
     src.push_str(
         r#"
@@ -112,10 +115,6 @@ fn escape_assembly_path(path: &Path) -> String {
         .replace('"', "\\\"")
 }
 
-fn escape_assembly_string(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\0', "")
+fn macho_external_symbol(name: &str) -> String {
+    format!("_{}", name)
 }

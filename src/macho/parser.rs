@@ -1,16 +1,21 @@
 use anyhow::{bail, Result};
 
 use super::model::{
-    DyldInfoCommand, EntryPointCommand, FileType, Flags, Header, LinkEditDataCommand, LoadCommand,
-    MachoFile, Section, SegmentCommand, SymtabCommand, MH_CIGAM_64,
+    DyldInfoCommand, DylibCommand, EntryPointCommand, FileType, Flags, Header, LinkEditDataCommand,
+    LoadCommand, MachoFile, Section, SegmentCommand, SymtabCommand, MH_CIGAM_64,
 };
 
 const LC_SEGMENT_64: u32 = 0x19;
 const LC_SYMTAB: u32 = 0x2;
+const LC_LOAD_DYLIB: u32 = 0xc;
 const LC_UUID: u32 = 0x1b;
+const LC_LOAD_WEAK_DYLIB: u32 = 0x8000_0018;
 const LC_CODE_SIGNATURE: u32 = 0x1d;
 const LC_DYLD_INFO: u32 = 0x22;
 const LC_DYLD_INFO_ONLY: u32 = 0x8000_0022;
+const LC_REEXPORT_DYLIB: u32 = 0x8000_001f;
+const LC_LAZY_LOAD_DYLIB: u32 = 0x20;
+const LC_LOAD_UPWARD_DYLIB: u32 = 0x8000_0023;
 const LC_MAIN: u32 = 0x8000_0028;
 const LC_DYLD_CHAINED_FIXUPS: u32 = 0x8000_0034;
 
@@ -75,6 +80,8 @@ fn parse_load_commands(r: &mut Reader, ncmds: u32) -> Result<Vec<LoadCommand>> {
         let lc = match cmd {
             LC_SEGMENT_64 => parse_segment(&mut pr)?,
             LC_SYMTAB => parse_symtab(&mut pr)?,
+            LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB | LC_LAZY_LOAD_DYLIB
+            | LC_LOAD_UPWARD_DYLIB => parse_dylib(cmd, payload)?,
             LC_DYLD_INFO | LC_DYLD_INFO_ONLY => parse_dyld_info(&mut pr)?,
             LC_UUID => parse_uuid(&mut pr)?,
             LC_MAIN => parse_entry_point(&mut pr)?,
@@ -146,6 +153,25 @@ fn parse_symtab(r: &mut Reader) -> Result<LoadCommand> {
         nsyms: r.read_u32()?,
         str_offset: r.read_u32()?,
         str_size: r.read_u32()?,
+    }))
+}
+
+fn parse_dylib(cmd: u32, payload: &[u8]) -> Result<LoadCommand> {
+    let mut r = Reader::new(payload);
+    let name_offset = r.read_u32()? as usize;
+    r.skip(12)?; // timestamp + current_version + compatibility_version
+
+    if name_offset < 8 {
+        bail!("invalid dylib name offset {name_offset}");
+    }
+    let payload_name_offset = name_offset - 8;
+    if payload_name_offset >= payload.len() {
+        bail!("dylib name offset {name_offset} is outside load command");
+    }
+
+    Ok(LoadCommand::Dylib(DylibCommand {
+        name: read_c_string(&payload[payload_name_offset..]),
+        weak: cmd == LC_LOAD_WEAK_DYLIB,
     }))
 }
 

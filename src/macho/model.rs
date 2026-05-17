@@ -55,6 +55,7 @@ bitflags! {
 pub enum LoadCommand {
     Segment(SegmentCommand),
     SymbolTable(SymtabCommand),
+    Dylib(DylibCommand),
     DyldInfo(DyldInfoCommand),
     Uuid([u8; 16]),
     EntryPoint(EntryPointCommand),
@@ -89,6 +90,11 @@ pub struct SymtabCommand {
     pub nsyms: u32,
     pub str_offset: u32,
     pub str_size: u32,
+}
+
+pub struct DylibCommand {
+    pub name: String,
+    pub weak: bool,
 }
 
 pub struct DyldInfoCommand {
