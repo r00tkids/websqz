@@ -11,12 +11,12 @@
 .extern _arithmetic_decoder_init
 .extern _arithmetic_decode_stream
 
-.extern _websqz_compressed_start
-.extern _websqz_compressed_end
-.extern _websqz_decode_chunks_start
-.extern _websqz_decode_chunks_end
-.extern _websqz_prepare_image
-.extern _websqz_launch_image
+.extern _rootsqz_compressed_start
+.extern _rootsqz_compressed_end
+.extern _rootsqz_decode_chunks_start
+.extern _rootsqz_decode_chunks_end
+.extern _rootsqz_prepare_image
+.extern _rootsqz_launch_image
 
 .globl _main
 _main:
@@ -31,22 +31,22 @@ _main:
     mov     x23, x2                 // envp
 
     // ArithmeticDecoder context, matching decoder.s' 32-byte layout.
-    adrp    x1, _websqz_compressed_start@PAGE
-    add     x1, x1, _websqz_compressed_start@PAGEOFF
-    adrp    x2, _websqz_compressed_end@PAGE
-    add     x2, x2, _websqz_compressed_end@PAGEOFF
+    adrp    x1, _rootsqz_compressed_start@PAGE
+    add     x1, x1, _rootsqz_compressed_start@PAGEOFF
+    adrp    x2, _rootsqz_compressed_end@PAGE
+    add     x2, x2, _rootsqz_compressed_end@PAGEOFF
     sub     x2, x2, x1
     add     x20, sp, #96
     mov     x0, x20
     bl      _arithmetic_decoder_init
 
-    bl      _websqz_prepare_image
+    bl      _rootsqz_prepare_image
     mov     x19, x0                 // mapped app image
 
-    adrp    x24, _websqz_decode_chunks_start@PAGE
-    add     x24, x24, _websqz_decode_chunks_start@PAGEOFF
-    adrp    x25, _websqz_decode_chunks_end@PAGE
-    add     x25, x25, _websqz_decode_chunks_end@PAGEOFF
+    adrp    x24, _rootsqz_decode_chunks_start@PAGE
+    add     x24, x24, _rootsqz_decode_chunks_start@PAGEOFF
+    adrp    x25, _rootsqz_decode_chunks_end@PAGE
+    add     x25, x25, _rootsqz_decode_chunks_end@PAGEOFF
 
 1:
     cmp     x24, x25
@@ -64,7 +64,7 @@ _main:
     mov     w1, w21
     mov     x2, x22
     mov     x3, x23
-    bl      _websqz_launch_image
+    bl      _rootsqz_launch_image
 
     ldp     x25, x26, [sp, #64]
     ldp     x23, x24, [sp, #48]

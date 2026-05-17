@@ -1,8 +1,8 @@
-# websqz
-websqz is a tool for compressing and decompressing demo intros for the web. The current overhead is about 1.6 KiB, so it's primarily intended for 64KiB intros, though this may change in the future. 
+# rootsqz
+rootsqz is a tool for compressing and decompressing demo intros for the web. The current overhead is about 1.6 KiB, so it's primarily intended for 64KiB intros, though this may change in the future. 
 It's inspired by [Crinkler](https://github.com/runestubbe/Crinkler) and ZPaq series of compressors.
 
-Also see the rollup / Vite plugin: https://github.com/r00tkids/rollup-plugin-websqz
+Also see the rollup / Vite plugin: https://github.com/r00tkids/rollup-plugin-rootsqz
 
 ## Features
 - High compression ratio for JavaScript and binary assets - about 20% better than deflate-raw
@@ -12,15 +12,15 @@ Also see the rollup / Vite plugin: https://github.com/r00tkids/rollup-plugin-web
 
 1. Clone the repository:
    ```sh
-   git clone https://github.com/r00tkids/websqz.git
-   cd websqz
+   git clone https://github.com/r00tkids/rootsqz.git
+   cd rootsqz
    ```
 2. Install dependencies:
    - Install [UglifyJS](https://github.com/mishoo/UglifyJS):
      ```sh
      npm install -g uglify-js
      ```
-   - Build and install websqz (requires Rust and Cargo):
+   - Build and install rootsqz (requires Rust and Cargo):
      ```sh
      cargo install --path .
      ```
@@ -29,7 +29,7 @@ Also see the rollup / Vite plugin: https://github.com/r00tkids/rollup-plugin-web
 
 Basic compression example:
 ```sh
-websqz --js-main example/index.js -f example/bundled.glsl --output-directory out
+rootsqz --js-main example/index.js -f example/bundled.glsl --output-directory out
 ```
 
 Options:
@@ -37,11 +37,11 @@ Options:
 - `--files <FILES>`: Extra files to be compressed. Order matters, so files of similar content should be ordered together.
 - `--pre-compressed-files <FILES>`: Extra files that are already compressed (jpeg, mp4 etc.)
 - `--output-directory <dir>`: Output directory for compressed files
-- See `websqz --help` for more CLI options
+- See `rootsqz --help` for more CLI options
 
 ## Runtime API
-To access the contents of files specified with `--files` or `--pre-compressed-files`, use `wsqz.files["<FILENAME>"]`.
-`wsqz.files["<FILENAME>"]` returns an `Uint8Array`, to read it as text use `new TextDecoder().decode(wsqz.files["example.glsl"])`.
+To access the contents of files specified with `--files` or `--pre-compressed-files`, use `rsqz.files["<FILENAME>"]`.
+`rsqz.files["<FILENAME>"]` returns an `Uint8Array`, to read it as text use `new TextDecoder().decode(rsqz.files["example.glsl"])`.
 
 Note: `<FILENAME>` refers to the base name of the file, not its full or relative path.
 

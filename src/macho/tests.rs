@@ -335,52 +335,52 @@ fn render_payload_assembly(
     format!(
         r#".section __DATA,__const
 .p2align 3
-.globl _websqz_compressed_start
-_websqz_compressed_start:
+.globl _rootsqz_compressed_start
+_rootsqz_compressed_start:
 .incbin "{compressed_path}"
-.globl _websqz_compressed_end
-_websqz_compressed_end:
+.globl _rootsqz_compressed_end
+_rootsqz_compressed_end:
 
 .p2align 3
-.globl _websqz_expected_start
-_websqz_expected_start:
+.globl _rootsqz_expected_start
+_rootsqz_expected_start:
 .incbin "{expected_path}"
-.globl _websqz_expected_end
-_websqz_expected_end:
+.globl _rootsqz_expected_end
+_rootsqz_expected_end:
 
 .p2align 3
-.globl _websqz_image_size
-_websqz_image_size:
+.globl _rootsqz_image_size
+_rootsqz_image_size:
     .quad {output_len}
-.globl _websqz_entry_offset
-_websqz_entry_offset:
+.globl _rootsqz_entry_offset
+_rootsqz_entry_offset:
     .quad 0
 
 .p2align 3
-.globl _websqz_decode_chunks_start
-_websqz_decode_chunks_start:
+.globl _rootsqz_decode_chunks_start
+_rootsqz_decode_chunks_start:
     .quad 0
     .quad {output_len}
-.globl _websqz_decode_chunks_end
-_websqz_decode_chunks_end:
+.globl _rootsqz_decode_chunks_end
+_rootsqz_decode_chunks_end:
 
 .p2align 3
-.globl _websqz_segments_start
-_websqz_segments_start:
-.globl _websqz_segments_end
-_websqz_segments_end:
+.globl _rootsqz_segments_start
+_rootsqz_segments_start:
+.globl _rootsqz_segments_end
+_rootsqz_segments_end:
 
 .p2align 3
-.globl _websqz_imports_start
-_websqz_imports_start:
-.globl _websqz_imports_end
-_websqz_imports_end:
+.globl _rootsqz_imports_start
+_rootsqz_imports_start:
+.globl _rootsqz_imports_end
+_rootsqz_imports_end:
 
 .p2align 3
-.globl _websqz_fixups_start
-_websqz_fixups_start:
-.globl _websqz_fixups_end
-_websqz_fixups_end:
+.globl _rootsqz_fixups_start
+_rootsqz_fixups_start:
+.globl _rootsqz_fixups_end
+_rootsqz_fixups_end:
 "#,
         compressed_path = escape_assembly_path(compressed_path),
         expected_path = escape_assembly_path(expected_path),
@@ -400,8 +400,8 @@ fn render_norder_model_assembly(byte_mask: u8, table_pow2: u32, is_word: bool) -
             model_hash(1337, 2),
             2166136261u64,
             u64::MAX,
-            "_websqz_word_predict",
-            "_websqz_word_learn",
+            "_rootsqz_word_predict",
+            "_rootsqz_word_learn",
             1u32,
         )
     } else {
@@ -409,8 +409,8 @@ fn render_norder_model_assembly(byte_mask: u8, table_pow2: u32, is_word: bool) -
             model_hash(byte_mask as u32, 2),
             0u64,
             byte_mask_to_context_mask(byte_mask),
-            "_websqz_norder_byte_predict",
-            "_websqz_norder_byte_learn",
+            "_rootsqz_norder_byte_predict",
+            "_rootsqz_norder_byte_learn",
             0u32,
         )
     };
@@ -418,8 +418,8 @@ fn render_norder_model_assembly(byte_mask: u8, table_pow2: u32, is_word: bool) -
     format!(
         r#".section __DATA,__data
 .p2align 3
-.globl _websqz_model_ctx
-_websqz_model_ctx:
+.globl _rootsqz_model_ctx
+_rootsqz_model_ctx:
     .long 0
     .long 1
     .long 0x{magic_num:08x}
@@ -428,26 +428,26 @@ _websqz_model_ctx:
     .quad 0x{mask:016x}
     .long {is_word_flag}
     .long 0
-    .quad _websqz_norder_table
+    .quad _rootsqz_norder_table
     .quad {hash_mask}
 
 .p2align 2
-_websqz_norder_table:
+_rootsqz_norder_table:
 .space {table_bytes}
 
 .text
 .align 2
-.globl _websqz_model_predict
-_websqz_model_predict:
+.globl _rootsqz_model_predict
+_rootsqz_model_predict:
     stp     x29, x30, [sp, #-16]!
     mov     x29, sp
     bl      {predict_fn}
-    bl      _websqz_prob_squash
+    bl      _rootsqz_prob_squash
     ldp     x29, x30, [sp], #16
     ret
 
-.globl _websqz_model_learn
-_websqz_model_learn:
+.globl _rootsqz_model_learn
+_rootsqz_model_learn:
     b       {learn_fn}
 "#,
         hash_mask = table_len - 1,
@@ -468,23 +468,23 @@ fn render_ln_mixer_model_assembly(table_pow2: u32) -> String {
     format!(
         r#".section __DATA,__data
 .p2align 3
-.globl _websqz_model_ctx
-_websqz_model_ctx:
+.globl _rootsqz_model_ctx
+_rootsqz_model_ctx:
     .long {num_models}
     .long 1
     .long 0
     .long 0
     .double 0.0
-    .quad _websqz_mixer_child_contexts
-    .quad _websqz_mixer_predict_fns
-    .quad _websqz_mixer_learn_fns
-    .quad _websqz_mixer_base_weights
-    .quad _websqz_mixer_ctx_weights
-    .quad _websqz_mixer_ctx_init
-    .quad _websqz_mixer_last_p
+    .quad _rootsqz_mixer_child_contexts
+    .quad _rootsqz_mixer_predict_fns
+    .quad _rootsqz_mixer_learn_fns
+    .quad _rootsqz_mixer_base_weights
+    .quad _rootsqz_mixer_ctx_weights
+    .quad _rootsqz_mixer_ctx_init
+    .quad _rootsqz_mixer_last_p
 
 .p2align 3
-_websqz_mixer_child0:
+_rootsqz_mixer_child0:
     .long 0
     .long 1
     .long 0x{child0_magic:08x}
@@ -493,11 +493,11 @@ _websqz_mixer_child0:
     .quad 0
     .long 0
     .long 0
-    .quad _websqz_mixer_table
+    .quad _rootsqz_mixer_table
     .quad {hash_mask}
 
 .p2align 3
-_websqz_mixer_child1:
+_rootsqz_mixer_child1:
     .long 0
     .long 1
     .long 0x{child1_magic:08x}
@@ -506,50 +506,50 @@ _websqz_mixer_child1:
     .quad 0x{child1_context_mask:016x}
     .long 0
     .long 0
-    .quad _websqz_mixer_table
+    .quad _rootsqz_mixer_table
     .quad {hash_mask}
 
 .p2align 3
-_websqz_mixer_child_contexts:
-    .quad _websqz_mixer_child0
-    .quad _websqz_mixer_child1
-_websqz_mixer_predict_fns:
-    .quad _websqz_norder_byte_predict
-    .quad _websqz_norder_byte_predict
-_websqz_mixer_learn_fns:
-    .quad _websqz_norder_byte_learn
-    .quad _websqz_norder_byte_learn
-_websqz_mixer_base_weights:
+_rootsqz_mixer_child_contexts:
+    .quad _rootsqz_mixer_child0
+    .quad _rootsqz_mixer_child1
+_rootsqz_mixer_predict_fns:
+    .quad _rootsqz_norder_byte_predict
+    .quad _rootsqz_norder_byte_predict
+_rootsqz_mixer_learn_fns:
+    .quad _rootsqz_norder_byte_learn
+    .quad _rootsqz_norder_byte_learn
+_rootsqz_mixer_base_weights:
     .double 0.5
     .double 0.5
-_websqz_mixer_last_p:
+_rootsqz_mixer_last_p:
     .space 16
 
 .p2align 2
-_websqz_mixer_table:
+_rootsqz_mixer_table:
 .space {table_bytes}
 
 .p2align 3
-_websqz_mixer_ctx_init:
+_rootsqz_mixer_ctx_init:
     .space {ctx_rows}
 .p2align 3
-_websqz_mixer_ctx_weights:
+_rootsqz_mixer_ctx_weights:
     .space {ctx_weight_bytes}
 
 .text
 .align 2
-.globl _websqz_model_predict
-_websqz_model_predict:
+.globl _rootsqz_model_predict
+_rootsqz_model_predict:
     stp     x29, x30, [sp, #-16]!
     mov     x29, sp
-    bl      _websqz_ln_mixer_predict_stretched
-    bl      _websqz_prob_squash
+    bl      _rootsqz_ln_mixer_predict_stretched
+    bl      _rootsqz_prob_squash
     ldp     x29, x30, [sp], #16
     ret
 
-.globl _websqz_model_learn
-_websqz_model_learn:
-    b       _websqz_ln_mixer_learn
+.globl _rootsqz_model_learn
+_rootsqz_model_learn:
+    b       _rootsqz_ln_mixer_learn
 "#,
         hash_mask = table_len - 1,
         table_bytes = table_len * NORDER_RECORD_BYTES,
@@ -585,24 +585,24 @@ const HARNESS_C: &str = r#"
 #include <stdlib.h>
 #include <string.h>
 
-extern const uint8_t websqz_expected_start[];
-extern const uint8_t websqz_expected_end[];
-extern const uint64_t websqz_image_size;
+extern const uint8_t rootsqz_expected_start[];
+extern const uint8_t rootsqz_expected_end[];
+extern const uint64_t rootsqz_image_size;
 
-uintptr_t websqz_model_ctx;
+uintptr_t rootsqz_model_ctx;
 
-double websqz_model_predict(void *ctx) {
+double rootsqz_model_predict(void *ctx) {
     (void)ctx;
     return 0.5;
 }
 
-void websqz_model_learn(void *ctx, uint32_t bit) {
+void rootsqz_model_learn(void *ctx, uint32_t bit) {
     (void)ctx;
     (void)bit;
 }
 
-void *websqz_prepare_image(void) {
-    uint8_t *output = calloc(1, (size_t)websqz_image_size);
+void *rootsqz_prepare_image(void) {
+    uint8_t *output = calloc(1, (size_t)rootsqz_image_size);
     if (!output) {
         fprintf(stderr, "calloc failed\n");
         exit(1);
@@ -610,16 +610,16 @@ void *websqz_prepare_image(void) {
     return output;
 }
 
-int websqz_launch_image(uint8_t *output, int argc, char **argv, char **envp) {
+int rootsqz_launch_image(uint8_t *output, int argc, char **argv, char **envp) {
     (void)argc;
     (void)argv;
     (void)envp;
-    const uint8_t *expected = websqz_expected_start;
-    size_t expected_len = (size_t)(websqz_expected_end - websqz_expected_start);
+    const uint8_t *expected = rootsqz_expected_start;
+    size_t expected_len = (size_t)(rootsqz_expected_end - rootsqz_expected_start);
 
-    if ((size_t)websqz_image_size != expected_len) {
+    if ((size_t)rootsqz_image_size != expected_len) {
         fprintf(stderr, "decoded length mismatch: got %llu, expected %zu\n",
-                (unsigned long long)websqz_image_size, expected_len);
+                (unsigned long long)rootsqz_image_size, expected_len);
         exit(1);
     }
 
@@ -645,12 +645,12 @@ const HARNESS_AFTER_DECODE_C: &str = r#"
 #include <stdlib.h>
 #include <string.h>
 
-extern const uint8_t websqz_expected_start[];
-extern const uint8_t websqz_expected_end[];
-extern const uint64_t websqz_image_size;
+extern const uint8_t rootsqz_expected_start[];
+extern const uint8_t rootsqz_expected_end[];
+extern const uint64_t rootsqz_image_size;
 
-void *websqz_prepare_image(void) {
-    uint8_t *output = calloc(1, (size_t)websqz_image_size);
+void *rootsqz_prepare_image(void) {
+    uint8_t *output = calloc(1, (size_t)rootsqz_image_size);
     if (!output) {
         fprintf(stderr, "calloc failed\n");
         exit(1);
@@ -658,16 +658,16 @@ void *websqz_prepare_image(void) {
     return output;
 }
 
-int websqz_launch_image(uint8_t *output, int argc, char **argv, char **envp) {
+int rootsqz_launch_image(uint8_t *output, int argc, char **argv, char **envp) {
     (void)argc;
     (void)argv;
     (void)envp;
-    const uint8_t *expected = websqz_expected_start;
-    size_t expected_len = (size_t)(websqz_expected_end - websqz_expected_start);
+    const uint8_t *expected = rootsqz_expected_start;
+    size_t expected_len = (size_t)(rootsqz_expected_end - rootsqz_expected_start);
 
-    if ((size_t)websqz_image_size != expected_len) {
+    if ((size_t)rootsqz_image_size != expected_len) {
         fprintf(stderr, "decoded length mismatch: got %llu, expected %zu\n",
-                (unsigned long long)websqz_image_size, expected_len);
+                (unsigned long long)rootsqz_image_size, expected_len);
         exit(1);
     }
 

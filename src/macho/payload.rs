@@ -6,23 +6,23 @@ pub fn render_payload_assembly(compressed_path: &Path, packed: &CompressedMacho)
     let mut src = format!(
         r#".section __DATA,__const
 .p2align 3
-.globl _websqz_compressed_start
-_websqz_compressed_start:
+.globl _rootsqz_compressed_start
+_rootsqz_compressed_start:
 .incbin "{compressed_path}"
-.globl _websqz_compressed_end
-_websqz_compressed_end:
+.globl _rootsqz_compressed_end
+_rootsqz_compressed_end:
 
 .p2align 3
-.globl _websqz_image_size
-_websqz_image_size:
+.globl _rootsqz_image_size
+_rootsqz_image_size:
     .quad {image_size}
-.globl _websqz_entry_offset
-_websqz_entry_offset:
+.globl _rootsqz_entry_offset
+_rootsqz_entry_offset:
     .quad {entry_offset}
 
 .p2align 3
-.globl _websqz_decode_chunks_start
-_websqz_decode_chunks_start:
+.globl _rootsqz_decode_chunks_start
+_rootsqz_decode_chunks_start:
 "#,
         compressed_path = escape_assembly_path(compressed_path),
         image_size = packed.image_size,
@@ -37,12 +37,12 @@ _websqz_decode_chunks_start:
         ));
     }
     src.push_str(
-        r#".globl _websqz_decode_chunks_end
-_websqz_decode_chunks_end:
+        r#".globl _rootsqz_decode_chunks_end
+_rootsqz_decode_chunks_end:
 
 .p2align 3
-.globl _websqz_segments_start
-_websqz_segments_start:
+.globl _rootsqz_segments_start
+_rootsqz_segments_start:
 "#,
     );
     for segment in &packed.segments {
@@ -54,28 +54,28 @@ _websqz_segments_start:
         ));
     }
     src.push_str(
-        r#".globl _websqz_segments_end
-_websqz_segments_end:
+        r#".globl _rootsqz_segments_end
+_rootsqz_segments_end:
 
 .p2align 3
-.globl _websqz_imports_start
-_websqz_imports_start:
+.globl _rootsqz_imports_start
+_rootsqz_imports_start:
 "#,
     );
     for (i, import) in packed.imports.iter().enumerate() {
         src.push_str(&format!(
-            "    .quad L_websqz_import_{i}\n    .long {weak}\n    .long 0\n",
+            "    .quad L_rootsqz_import_{i}\n    .long {weak}\n    .long 0\n",
             weak = if import.weak { 1 } else { 0 },
         ));
     }
     src.push_str(
-        r#".globl _websqz_imports_end
-_websqz_imports_end:
+        r#".globl _rootsqz_imports_end
+_rootsqz_imports_end:
 "#,
     );
     for (i, import) in packed.imports.iter().enumerate() {
         src.push_str(&format!(
-            "L_websqz_import_{i}:\n    .asciz \"{}\"\n",
+            "L_rootsqz_import_{i}:\n    .asciz \"{}\"\n",
             escape_assembly_string(&import.name),
         ));
     }
@@ -83,8 +83,8 @@ _websqz_imports_end:
     src.push_str(
         r#"
 .p2align 3
-.globl _websqz_fixups_start
-_websqz_fixups_start:
+.globl _rootsqz_fixups_start
+_rootsqz_fixups_start:
 "#,
     );
     for fixup in &packed.fixups {
@@ -99,8 +99,8 @@ _websqz_fixups_start:
         ));
     }
     src.push_str(
-        r#".globl _websqz_fixups_end
-_websqz_fixups_end:
+        r#".globl _rootsqz_fixups_end
+_rootsqz_fixups_end:
 "#,
     );
     src

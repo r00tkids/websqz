@@ -44,7 +44,7 @@ pub struct Args {
     #[arg(short, long, default_value = "web")]
     pub target: output_generator::Target,
 
-    /// If set, reports detailed compression statistics to websqz-report.html
+    /// If set, reports detailed compression statistics to rootsqz-report.html
     #[arg(short, long)]
     pub report: bool,
 }
@@ -53,7 +53,7 @@ pub fn run(args: Args) -> Result<()> {
     let model_config = create_default_model_config();
 
     println!(
-        "Starting compression (websqz v{})",
+        "Starting compression (rootsqz v{})",
         env!("CARGO_PKG_VERSION")
     );
     println!("Initializing hash table...");

@@ -7,7 +7,7 @@ const MIXER_CONTEXT_ROWS: usize = 256 * 255;
 
 pub fn render_model_assembly(model_config: &ModelConfig, table_pow2: u32) -> Result<String> {
     let mut generator = ModelAssemblyGenerator::new(table_pow2);
-    let root = generator.render_model(model_config, "_websqz_model_ctx")?;
+    let root = generator.render_model(model_config, "_rootsqz_model_ctx")?;
     Ok(generator.finish(root))
 }
 
@@ -39,17 +39,17 @@ impl ModelAssemblyGenerator {
             r#"
 .text
 .align 2
-.globl _websqz_model_predict
-_websqz_model_predict:
+.globl _rootsqz_model_predict
+_rootsqz_model_predict:
     stp     x29, x30, [sp, #-16]!
     mov     x29, sp
     bl      {pred}
-    bl      _websqz_prob_squash
+    bl      _rootsqz_prob_squash
     ldp     x29, x30, [sp], #16
     ret
 
-.globl _websqz_model_learn
-_websqz_model_learn:
+.globl _rootsqz_model_learn
+_rootsqz_model_learn:
     b       {learn}
 "#,
             pred = root.pred_symbol,
@@ -60,7 +60,7 @@ _websqz_model_learn:
             let table_bytes = (1usize << self.table_pow2) * NORDER_RECORD_BYTES;
             self.src.push_str(&format!(
                 r#"
-.zerofill __DATA,__bss,_websqz_norder_table,{table_bytes},2
+.zerofill __DATA,__bss,_rootsqz_norder_table,{table_bytes},2
 "#
             ));
         }
@@ -100,8 +100,8 @@ _websqz_model_learn:
                 model_hash(1337, 2),
                 2166136261u64,
                 u64::MAX,
-                "_websqz_word_predict",
-                "_websqz_word_learn",
+                "_rootsqz_word_predict",
+                "_rootsqz_word_learn",
                 1u32,
             )
         } else {
@@ -109,8 +109,8 @@ _websqz_model_learn:
                 model_hash(byte_mask as u32, 2),
                 0u64,
                 byte_mask_to_context_mask(byte_mask),
-                "_websqz_norder_byte_predict",
-                "_websqz_norder_byte_learn",
+                "_rootsqz_norder_byte_predict",
+                "_rootsqz_norder_byte_learn",
                 0u32,
             )
         };
@@ -129,7 +129,7 @@ _websqz_model_learn:
     .quad 0x{mask:016x}
     .long {is_word_flag}
     .long 0
-    .quad _websqz_norder_table
+    .quad _rootsqz_norder_table
     .quad {hash_mask}
 "#,
             hash_mask = table_len - 1,
@@ -152,17 +152,17 @@ _websqz_model_learn:
         }
 
         let mixer_id = self.alloc_id();
-        let child_ctxs_symbol = format!("L_websqz_mixer_{mixer_id}_child_contexts");
-        let pred_fns_symbol = format!("L_websqz_mixer_{mixer_id}_predict_fns");
-        let learn_fns_symbol = format!("L_websqz_mixer_{mixer_id}_learn_fns");
-        let base_weights_symbol = format!("L_websqz_mixer_{mixer_id}_base_weights");
-        let ctx_weights_symbol = format!("L_websqz_mixer_{mixer_id}_ctx_weights");
-        let ctx_init_symbol = format!("L_websqz_mixer_{mixer_id}_ctx_init");
-        let last_p_symbol = format!("L_websqz_mixer_{mixer_id}_last_p");
+        let child_ctxs_symbol = format!("L_rootsqz_mixer_{mixer_id}_child_contexts");
+        let pred_fns_symbol = format!("L_rootsqz_mixer_{mixer_id}_predict_fns");
+        let learn_fns_symbol = format!("L_rootsqz_mixer_{mixer_id}_learn_fns");
+        let base_weights_symbol = format!("L_rootsqz_mixer_{mixer_id}_base_weights");
+        let ctx_weights_symbol = format!("L_rootsqz_mixer_{mixer_id}_ctx_weights");
+        let ctx_init_symbol = format!("L_rootsqz_mixer_{mixer_id}_ctx_init");
+        let last_p_symbol = format!("L_rootsqz_mixer_{mixer_id}_last_p");
 
         let mut children = Vec::with_capacity(models.len());
         for model in models {
-            let child_symbol = format!("L_websqz_mixer_{mixer_id}_child_{}", children.len());
+            let child_symbol = format!("L_rootsqz_mixer_{mixer_id}_child_{}", children.len());
             children.push(self.render_model(model, &child_symbol)?);
         }
 
@@ -234,8 +234,8 @@ _websqz_model_learn:
 
         Ok(RenderedModel {
             ctx_symbol: ctx_symbol.to_owned(),
-            pred_symbol: "_websqz_ln_mixer_predict_stretched",
-            learn_symbol: "_websqz_ln_mixer_learn",
+            pred_symbol: "_rootsqz_ln_mixer_predict_stretched",
+            learn_symbol: "_rootsqz_ln_mixer_learn",
         })
     }
 

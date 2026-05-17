@@ -1,17 +1,17 @@
 // Shared AArch64 Mach-O helpers for assembly probability models.
 //
 // Model entrypoints that mirror Rust's Model::pred return stretched
-// probabilities.  The final _websqz_model_predict callback used by decoder.s
+// probabilities.  The final _rootsqz_model_predict callback used by decoder.s
 // must squash that value to [0, 1] before returning.
 
 .text
 .align 2
 
-.equ WEBSQZ_U24_MAX, 0x00ffffff
-.equ WEBSQZ_NORDER_DATA_DEFAULT, 0x007fffff
+.equ rootsqz_U24_MAX, 0x00ffffff
+.equ rootsqz_NORDER_DATA_DEFAULT, 0x007fffff
 
-.globl _websqz_model_hash
-_websqz_model_hash:
+.globl _rootsqz_model_hash
+_rootsqz_model_hash:
     // uint32_t hash(uint32_t value, uint32_t shift)
     // value ^= value >> shift;
     // return (0x9E35A7BDu * value) >> shift;
@@ -23,8 +23,8 @@ _websqz_model_hash:
     lsr     w0, w0, w1
     ret
 
-.globl _websqz_probability_from_u24
-_websqz_probability_from_u24:
+.globl _rootsqz_probability_from_u24
+_rootsqz_probability_from_u24:
     // d0 = clamp((double)w0 / 0x00ffffff, eps, 1.0 - eps)
     cbnz    w0, 1f
     mov     w0, #1
@@ -36,20 +36,20 @@ _websqz_probability_from_u24:
     b.ne    2f
     sub     w0, w9, #1
 2:
-    adrp    x9, _websqz_u24_max_double@PAGE
-    add     x9, x9, _websqz_u24_max_double@PAGEOFF
+    adrp    x9, _rootsqz_u24_max_double@PAGE
+    add     x9, x9, _rootsqz_u24_max_double@PAGEOFF
     ucvtf   d0, w0
     ldr     d1, [x9]
     fdiv    d0, d0, d1
     ret
 
-.globl _websqz_prob_stretch_u24
-_websqz_prob_stretch_u24:
+.globl _rootsqz_prob_stretch_u24
+_rootsqz_prob_stretch_u24:
     // d0 = log(p / (1.0 - p)), where p is the clamped u24 probability.
     stp     x29, x30, [sp, #-16]!
     mov     x29, sp
 
-    bl      _websqz_probability_from_u24
+    bl      _rootsqz_probability_from_u24
     fmov    d2, d0
     fmov    d1, #1.00000000
     fsub    d1, d1, d2
@@ -59,8 +59,8 @@ _websqz_prob_stretch_u24:
     ldp     x29, x30, [sp], #16
     ret
 
-.globl _websqz_prob_squash
-_websqz_prob_squash:
+.globl _rootsqz_prob_squash
+_rootsqz_prob_squash:
     // d0 = 1.0 / (1.0 + exp(-d0))
     stp     x29, x30, [sp, #-16]!
     mov     x29, sp
@@ -76,6 +76,6 @@ _websqz_prob_squash:
 
 .section __TEXT,__literal8,8byte_literals
 .p2align 3
-.globl _websqz_u24_max_double
-_websqz_u24_max_double:
+.globl _rootsqz_u24_max_double
+_rootsqz_u24_max_double:
     .double 16777215.0

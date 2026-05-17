@@ -30,16 +30,16 @@
 .equ LNM_LAST_P,         72
 .equ LNM_SIZE,           80
 
-.globl _websqz_ln_mixer_predict_stretched
-_websqz_ln_mixer_predict_stretched:
+.globl _rootsqz_ln_mixer_predict_stretched
+_rootsqz_ln_mixer_predict_stretched:
     stp     x29, x30, [sp, #-32]!
     mov     x29, sp
     str     x19, [sp, #16]
     mov     x19, x0
 
-    bl      _websqz_ln_mixer_predict_sum
+    bl      _rootsqz_ln_mixer_predict_sum
     str     d0, [sp, #24]
-    bl      _websqz_prob_squash
+    bl      _rootsqz_prob_squash
     str     d0, [x19, #LNM_LAST_TOTAL_P]
     ldr     d0, [sp, #24]
 
@@ -47,7 +47,7 @@ _websqz_ln_mixer_predict_stretched:
     ldp     x29, x30, [sp], #32
     ret
 
-_websqz_ln_mixer_predict_sum:
+_rootsqz_ln_mixer_predict_sum:
     stp     x29, x30, [sp, #-112]!
     mov     x29, sp
     stp     x19, x20, [sp, #16]
@@ -90,8 +90,8 @@ _websqz_ln_mixer_predict_sum:
     ldr     d1, [x23, x27, lsl #3]
     cbz     w28, 2f
     ldr     d2, [x24, x27, lsl #3]
-    adrp    x9, L_websqz_ln_mixer_ctx_weight_scale@PAGE
-    add     x9, x9, L_websqz_ln_mixer_ctx_weight_scale@PAGEOFF
+    adrp    x9, L_rootsqz_ln_mixer_ctx_weight_scale@PAGE
+    add     x9, x9, L_rootsqz_ln_mixer_ctx_weight_scale@PAGEOFF
     ldr     d3, [x9]
     fmadd   d1, d2, d3, d1
 2:
@@ -113,8 +113,8 @@ _websqz_ln_mixer_predict_sum:
     ldp     x29, x30, [sp], #112
     ret
 
-.globl _websqz_ln_mixer_learn
-_websqz_ln_mixer_learn:
+.globl _rootsqz_ln_mixer_learn
+_rootsqz_ln_mixer_learn:
     stp     x29, x30, [sp, #-128]!
     mov     x29, sp
     stp     x19, x20, [sp, #16]
@@ -176,16 +176,16 @@ _websqz_ln_mixer_learn:
     ldr     d1, [x26, x27, lsl #3]
     fmul    d0, d0, d1             // pred_err * last_p[i]
 
-    adrp    x9, L_websqz_ln_mixer_learning_rate@PAGE
-    add     x9, x9, L_websqz_ln_mixer_learning_rate@PAGEOFF
+    adrp    x9, L_rootsqz_ln_mixer_learning_rate@PAGE
+    add     x9, x9, L_rootsqz_ln_mixer_learning_rate@PAGEOFF
     ldr     d2, [x9]
     ldr     d3, [x23, x27, lsl #3]
     fmul    d4, d0, d2
     fadd    d3, d3, d4
     str     d3, [x23, x27, lsl #3]
 
-    adrp    x9, L_websqz_ln_mixer_learning_rate_ctx@PAGE
-    add     x9, x9, L_websqz_ln_mixer_learning_rate_ctx@PAGEOFF
+    adrp    x9, L_rootsqz_ln_mixer_learning_rate_ctx@PAGE
+    add     x9, x9, L_rootsqz_ln_mixer_learning_rate_ctx@PAGEOFF
     ldr     d2, [x9]
     ldr     d3, [x24, x27, lsl #3]
     fmul    d4, d0, d2
@@ -220,9 +220,9 @@ _websqz_ln_mixer_learn:
 
 .section __TEXT,__literal8,8byte_literals
 .p2align 3
-L_websqz_ln_mixer_ctx_weight_scale:
+L_rootsqz_ln_mixer_ctx_weight_scale:
     .double 0.3
-L_websqz_ln_mixer_learning_rate:
+L_rootsqz_ln_mixer_learning_rate:
     .double 0.0004
-L_websqz_ln_mixer_learning_rate_ctx:
+L_rootsqz_ln_mixer_learning_rate_ctx:
     .double 0.022

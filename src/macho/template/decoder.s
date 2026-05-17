@@ -146,8 +146,8 @@ _arithmetic_decode_stream:
     mov     x19, x0                 // ctx
     mov     x20, x1                 // output
     mov     x21, x2                 // bytes remaining
-    adrp    x22, _websqz_model_ctx@PAGE
-    add     x22, x22, _websqz_model_ctx@PAGEOFF
+    adrp    x22, _rootsqz_model_ctx@PAGE
+    add     x22, x22, _rootsqz_model_ctx@PAGEOFF
 
 1:
     cbz     x21, 5f
@@ -156,7 +156,7 @@ _arithmetic_decode_stream:
 
 2:
     mov     x0, x22
-    bl      _websqz_model_predict
+    bl      _rootsqz_model_predict
 
     mov     x0, x19
     bl      _arithmetic_decode_bit
@@ -167,7 +167,7 @@ _arithmetic_decode_stream:
 
     mov     x0, x22
     mov     w1, w9
-    bl      _websqz_model_learn
+    bl      _rootsqz_model_learn
 
     subs    w24, w24, #1
     b.ne    2b

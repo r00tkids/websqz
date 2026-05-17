@@ -30,8 +30,8 @@
 .equ NOB_HASH_MASK, 48
 .equ NOB_SIZE,      56
 
-.globl _websqz_norder_byte_predict
-_websqz_norder_byte_predict:
+.globl _rootsqz_norder_byte_predict
+_rootsqz_norder_byte_predict:
     ldr     w9, [x0, #NOB_CTX]
     ldr     w10, [x0, #NOB_BIT_CTX]
     eor     w9, w9, w10
@@ -47,10 +47,10 @@ _websqz_norder_byte_predict:
     movz    w9, #0xffff
     movk    w9, #0x00ff, lsl #16
     and     w0, w0, w9
-    b       _websqz_prob_stretch_u24
+    b       _rootsqz_prob_stretch_u24
 
-.globl _websqz_norder_byte_learn
-_websqz_norder_byte_learn:
+.globl _rootsqz_norder_byte_learn
+_rootsqz_norder_byte_learn:
     stp     x29, x30, [sp, #-80]!
     mov     x29, sp
     stp     x19, x20, [sp, #16]
@@ -87,14 +87,14 @@ _websqz_norder_byte_learn:
     // prob += (U24_MAX * ((bit - prob/U24_MAX) / (count + 0.2))) as i32
     ucvtf   d0, w20
     ucvtf   d1, w25
-    adrp    x9, _websqz_u24_max_double@PAGE
-    add     x9, x9, _websqz_u24_max_double@PAGEOFF
+    adrp    x9, _rootsqz_u24_max_double@PAGE
+    add     x9, x9, _rootsqz_u24_max_double@PAGEOFF
     ldr     d2, [x9]
     fdiv    d1, d1, d2
     fsub    d0, d0, d1
     ucvtf   d3, w23
-    adrp    x9, L_websqz_norder_learning_bias@PAGE
-    add     x9, x9, L_websqz_norder_learning_bias@PAGEOFF
+    adrp    x9, L_rootsqz_norder_learning_bias@PAGE
+    add     x9, x9, L_rootsqz_norder_learning_bias@PAGEOFF
     ldr     d4, [x9]
     fadd    d3, d3, d4
     fdiv    d0, d0, d3
@@ -163,12 +163,12 @@ _websqz_norder_byte_learn:
 
     lsr     x0, x22, #32
     mov     w1, #3
-    bl      _websqz_model_hash
+    bl      _rootsqz_model_hash
     mov     w23, w0
 
     mov     w0, w22
     mov     w1, #3
-    bl      _websqz_model_hash
+    bl      _rootsqz_model_hash
     mov     w24, w0
 
     add     w25, w23, w23, lsl #3
@@ -191,5 +191,5 @@ _websqz_norder_byte_learn:
 
 .section __TEXT,__literal8,8byte_literals
 .p2align 3
-L_websqz_norder_learning_bias:
+L_rootsqz_norder_learning_bias:
     .double 0.2

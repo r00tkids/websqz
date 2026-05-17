@@ -9,10 +9,10 @@
 .text
 .align 2
 
-.globl _websqz_word_predict
-_websqz_word_predict:
-    b       _websqz_norder_byte_predict
+.globl _rootsqz_word_predict
+_rootsqz_word_predict:
+    b       _rootsqz_norder_byte_predict
 
-.globl _websqz_word_learn
-_websqz_word_learn:
-    b       _websqz_norder_byte_learn
+.globl _rootsqz_word_learn
+_rootsqz_word_learn:
+    b       _rootsqz_norder_byte_learn

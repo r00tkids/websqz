@@ -35,7 +35,7 @@ struct Cli {
     #[arg(short, long, default_value = "web")]
     target: web::Target,
 
-    /// If set, reports detailed compression statistics to websqz-report.html
+    /// If set, reports detailed compression statistics to rootsqz-report.html
     #[arg(short, long)]
     report: bool,
 }
@@ -51,7 +51,7 @@ enum Commands {
 fn main() -> Result<()> {
     setup_panic!(
         Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
-            .support("https://github.com/r00tkids/websqz/issues")
+            .support("https://github.com/r00tkids/rootsqz/issues")
     );
 
     tracing_subscriber::registry()
