@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::pack::CompressedMacho;
 
-pub(super) fn render_payload_assembly(compressed_path: &Path, packed: &CompressedMacho) -> String {
+pub fn render_payload_assembly(compressed_path: &Path, packed: &CompressedMacho) -> String {
     let mut src = format!(
         r#".section __DATA,__const
 .p2align 3

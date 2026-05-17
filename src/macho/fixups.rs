@@ -2,8 +2,8 @@ use anyhow::{bail, Context, Result};
 
 use super::model::{self, LoadCommand, SegmentCommand};
 
-pub(super) const FIXUP_KIND_REBASE: u32 = 0;
-pub(super) const FIXUP_KIND_BIND: u32 = 1;
+pub const FIXUP_KIND_REBASE: u32 = 0;
+pub const FIXUP_KIND_BIND: u32 = 1;
 
 const DYLD_CHAINED_IMPORT: u32 = 1;
 const DYLD_CHAINED_PTR_64_OFFSET: u16 = 6;
@@ -11,22 +11,22 @@ const DYLD_CHAINED_PTR_START_NONE: u16 = 0xffff;
 const DYLD_CHAINED_PTR_START_MULTI: u16 = 0x8000;
 
 #[derive(Debug)]
-pub(super) struct PackedImport {
-    pub(super) name: String,
-    pub(super) weak: bool,
+pub struct PackedImport {
+    pub name: String,
+    pub weak: bool,
 }
 
 #[derive(Debug)]
-pub(super) struct PackedFixup {
-    pub(super) offset: u64,
-    pub(super) target: u64,
-    pub(super) addend: u64,
-    pub(super) import_index: u32,
-    pub(super) high8: u32,
-    pub(super) kind: u32,
+pub struct PackedFixup {
+    pub offset: u64,
+    pub target: u64,
+    pub addend: u64,
+    pub import_index: u32,
+    pub high8: u32,
+    pub kind: u32,
 }
 
-pub(super) fn parse_chained_fixups(
+pub fn parse_chained_fixups(
     binary: &[u8],
     macho: &model::MachoFile,
     segments: &[&SegmentCommand],
@@ -221,7 +221,7 @@ fn read_u16_at(data: &[u8], offset: usize) -> Result<u16> {
     Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
 }
 
-pub(super) fn read_u32_at(data: &[u8], offset: usize) -> Result<u32> {
+pub fn read_u32_at(data: &[u8], offset: usize) -> Result<u32> {
     let bytes = data
         .get(offset..offset + 4)
         .with_context(|| format!("unexpected end of data at offset {offset}"))?;

@@ -22,7 +22,7 @@ const LN_MIXER_S: &str = include_str!("template/ln_mixer.s");
 const TINY_RUNTIME_C: &str = include_str!("template/tiny_runtime.c");
 const DIAGNOSTIC_RUNTIME_C: &str = include_str!("template/diagnostic_runtime.c");
 
-pub(super) fn build_decompressor(
+pub fn build_decompressor(
     output_dir: &Path,
     model_config: &ModelConfig,
     compressed_path: &Path,

@@ -2,10 +2,10 @@ use anyhow::{bail, Context, Result};
 
 use crate::compressor::compress_config::ModelConfig;
 
-pub(super) const NORDER_RECORD_BYTES: usize = 4;
+pub const NORDER_RECORD_BYTES: usize = 4;
 const MIXER_CONTEXT_ROWS: usize = 256 * 255;
 
-pub(super) fn render_model_assembly(model_config: &ModelConfig, table_pow2: u32) -> Result<String> {
+pub fn render_model_assembly(model_config: &ModelConfig, table_pow2: u32) -> Result<String> {
     let mut generator = ModelAssemblyGenerator::new(table_pow2);
     let root = generator.render_model(model_config, "_websqz_model_ctx")?;
     Ok(generator.finish(root))
@@ -246,12 +246,12 @@ _websqz_model_learn:
     }
 }
 
-pub(super) fn model_hash(mut value: u32, shift: u32) -> u32 {
+pub fn model_hash(mut value: u32, shift: u32) -> u32 {
     value ^= value >> shift;
     0x9E35_A7BDu32.wrapping_mul(value) >> shift
 }
 
-pub(super) fn byte_mask_to_context_mask(byte_mask: u8) -> u64 {
+pub fn byte_mask_to_context_mask(byte_mask: u8) -> u64 {
     let mut bit_mask = 0u64;
     for i in 0..8 {
         bit_mask |= ((byte_mask >> i) & 1) as u64 * (0xffu64 << (i * 8));

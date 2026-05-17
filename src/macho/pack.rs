@@ -11,33 +11,33 @@ use super::{
 const PAGE_SIZE: u64 = 0x4000;
 
 #[derive(Debug)]
-pub(super) struct CompressedMacho {
-    pub(super) compressed: Vec<u8>,
-    pub(super) uncompressed: Vec<u8>,
-    pub(super) image_size: u64,
-    pub(super) entry_offset: u64,
-    pub(super) decode_chunks: Vec<DecodeChunk>,
-    pub(super) segments: Vec<PackedSegment>,
-    pub(super) imports: Vec<PackedImport>,
-    pub(super) fixups: Vec<PackedFixup>,
+pub struct CompressedMacho {
+    pub compressed: Vec<u8>,
+    pub uncompressed: Vec<u8>,
+    pub image_size: u64,
+    pub entry_offset: u64,
+    pub decode_chunks: Vec<DecodeChunk>,
+    pub segments: Vec<PackedSegment>,
+    pub imports: Vec<PackedImport>,
+    pub fixups: Vec<PackedFixup>,
 }
 
 #[derive(Debug)]
-pub(super) struct PackedSegment {
-    pub(super) name: String,
-    pub(super) size: usize,
-    pub(super) offset: u64,
-    pub(super) vm_size: u64,
-    pub(super) init_prot: u32,
+pub struct PackedSegment {
+    pub name: String,
+    pub size: usize,
+    pub offset: u64,
+    pub vm_size: u64,
+    pub init_prot: u32,
 }
 
 #[derive(Debug)]
-pub(super) struct DecodeChunk {
-    pub(super) offset: u64,
-    pub(super) size: usize,
+pub struct DecodeChunk {
+    pub offset: u64,
+    pub size: usize,
 }
 
-pub(super) fn compress_binary_with_model(
+pub fn compress_binary_with_model(
     binary: &[u8],
     model: Box<dyn Model>,
 ) -> Result<CompressedMacho> {
