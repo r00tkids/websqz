@@ -128,13 +128,11 @@ pub fn compress_binary_with_model(
             .map(|(_, _, _, data)| data.len())
             .sum(),
     );
-    let mut uncompressed_len = 0usize;
     let mut encoder = Encoder::new(model, &mut compressed)?;
 
     for (_, _, _, data) in &decode_sources {
         encoder.encode_section(*data)?;
         uncompressed.extend_from_slice(data);
-        uncompressed_len += data.len();
     }
     encoder.finish()?;
 

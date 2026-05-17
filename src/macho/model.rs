@@ -1,3 +1,4 @@
+#![allow(unused)]
 use bitflags::bitflags;
 
 // ARM64 is always little-endian 64-bit; the on-disk magic bytes are [CF, FA, ED, FE]
