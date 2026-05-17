@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use human_panic::{setup_panic, Metadata};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -13,31 +13,6 @@ mod web;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-
-    /// Javascript file being evaluated after decompression
-    #[arg(short, long)]
-    js_main: Option<String>,
-
-    /// Files to be included and packed into the output, with compression.
-    /// Order matters, so files of similar content should be ordered together.
-    #[arg(short, long, value_delimiter = ',')]
-    files: Vec<String>,
-
-    /// Files to be included and packed into the output, without compression
-    #[arg(short, long, value_delimiter = ',')]
-    pre_compressed_files: Vec<String>,
-
-    /// Output directory
-    #[arg(short, long)]
-    output_directory: Option<String>,
-
-    /// Target platform for the output
-    #[arg(short, long, default_value = "web")]
-    target: web::Target,
-
-    /// If set, reports detailed compression statistics to rootsqz-report.html
-    #[arg(short, long)]
-    report: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -65,20 +40,7 @@ fn main() -> Result<()> {
         Some(Commands::Web(web_args)) => web::run(web_args),
         Some(Commands::Macho(macho_args)) => macho::run(macho_args),
         None => {
-            let web_args = web::Args {
-                js_main: args
-                    .js_main
-                    .filter(|s| !s.is_empty())
-                    .ok_or_else(|| anyhow::anyhow!("--js-main is required"))?,
-                output_directory: args
-                    .output_directory
-                    .ok_or_else(|| anyhow::anyhow!("--output-directory is required"))?,
-                files: args.files,
-                pre_compressed_files: args.pre_compressed_files,
-                target: args.target,
-                report: args.report,
-            };
-            web::run(web_args)
+            bail!("No command specified. Use --help for usage information.");
         }
     }
 }
