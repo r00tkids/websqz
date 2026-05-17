@@ -18,7 +18,6 @@ use crate::{
     },
     report::ReportGenerator,
 };
-pub use output_generator::Target;
 use output_generator::{render_output, BundledFile, OutputGenerationOptions};
 
 #[derive(clap::Args, Debug)]

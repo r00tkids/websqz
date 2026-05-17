@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -28,9 +29,16 @@ pub fn build_decompressor(
     compressed_path: &Path,
     packed: &CompressedMacho,
     diagnostics: bool,
+    wrapper_script: bool,
 ) -> Result<PathBuf> {
     if !command_available("clang") {
         bail!("clang is required to build the Mach-O decompressor");
+    }
+    if wrapper_script && !command_available("gzip") {
+        bail!("gzip is required to build the Mach-O wrapper script");
+    }
+    if wrapper_script && !command_available("chmod") {
+        bail!("chmod is required to build the Mach-O wrapper script");
     }
 
     let build_dir = output_dir.join("build");
@@ -71,6 +79,11 @@ pub fn build_decompressor(
     }
 
     let decompressor_path = output_dir.join("decompressor");
+    let native_decompressor_path = if wrapper_script {
+        build_dir.join("decompressor.macho")
+    } else {
+        decompressor_path.clone()
+    };
     let mut command = Command::new("clang");
     command.arg("-arch").arg("arm64");
     command.arg("-Oz");
@@ -79,14 +92,21 @@ pub fn build_decompressor(
     command.arg("-Wl,-dead_strip");
     command.arg("-Wl,-x");
     command.arg("-Wl,-no_data_const");
+    command.arg("-Wl,-no_function_starts");
+    command.arg("-Wl,-no_source_version");
+    command.arg("-Wl,-no_data_in_code_info");
+    command.arg("-Wl,-no_compact_unwind");
     for path in &source_paths {
         command.arg(path);
     }
-    command.arg("-o").arg(&decompressor_path);
+    command.arg("-o").arg(&native_decompressor_path);
 
     let output = command.output().context("Failed to run clang")?;
     assert_command_success("build Mach-O decompressor", &output)?;
-    strip_decompressor(&decompressor_path);
+    strip_decompressor(&native_decompressor_path);
+    if wrapper_script {
+        write_wrapper_script(&native_decompressor_path, &decompressor_path)?;
+    }
 
     Ok(decompressor_path)
 }
@@ -143,6 +163,45 @@ fn render_diagnostic_runtime_c() -> String {
 
 fn strip_decompressor(path: &Path) {
     let _ = Command::new("strip").arg(path).output();
+}
+
+fn write_wrapper_script(native_path: &Path, wrapper_path: &Path) -> Result<()> {
+    let output = Command::new("gzip")
+        .arg("-9")
+        .arg("-n")
+        .arg("-c")
+        .arg(native_path)
+        .output()
+        .context("Failed to run gzip")?;
+    assert_command_success("compress Mach-O decompressor for wrapper", &output)?;
+
+    let compressed = output.stdout;
+    let stub = format!(
+        "#!/bin/sh\n\
+         t=${{TMPDIR:-/tmp}}/w$$\n\
+         tail -c {} \"$0\"|gzip -dc>$t\n\
+         chmod +x $t\n\
+         $t \"$@\";r=$?\n\
+         rm $t\n\
+         exit $r\n",
+        compressed.len()
+    );
+
+    let mut file = fs::File::create(wrapper_path)
+        .with_context(|| format!("Failed to create {}", wrapper_path.display()))?;
+    file.write_all(stub.as_bytes())
+        .with_context(|| format!("Failed to write {}", wrapper_path.display()))?;
+    file.write_all(&compressed)
+        .with_context(|| format!("Failed to write {}", wrapper_path.display()))?;
+
+    let output = Command::new("chmod")
+        .arg("+x")
+        .arg(wrapper_path)
+        .output()
+        .context("Failed to run chmod")?;
+    assert_command_success("chmod Mach-O wrapper script", &output)?;
+
+    Ok(())
 }
 
 fn command_available(command: &str) -> bool {

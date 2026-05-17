@@ -144,6 +144,7 @@ fn full_decompressor_round_trip() {
         input: binary_path.clone(),
         output_directory: output_dir.to_string_lossy().into_owned(),
         diagnostics: false,
+        wrapper_script: false,
     })
     .expect("Failed to build full Mach-O decompressor");
 
@@ -166,6 +167,7 @@ fn full_decompressor_with_diagnostics_builds() {
         input: binary_path,
         output_directory: output_dir.to_string_lossy().into_owned(),
         diagnostics: true,
+        wrapper_script: false,
     })
     .expect("Failed to build diagnostic Mach-O decompressor");
 
@@ -173,6 +175,32 @@ fn full_decompressor_with_diagnostics_builds() {
         .output()
         .expect("Failed to run diagnostic generated decompressor");
     assert_success("run diagnostic generated decompressor", &run_output);
+    assert_eq!(run_output.stdout, b"Hello, World!\n");
+}
+
+#[test]
+fn full_decompressor_wrapper_script_round_trip() {
+    if !cfg!(all(target_os = "macos", target_arch = "aarch64"))
+        || !command_available("clang")
+        || !command_available("gzip")
+    {
+        return;
+    }
+
+    let binary_path = PathBuf::from("tests/macho/helloworld");
+    let output_dir = PathBuf::from("./testout/macho_full_decompressor_wrapper");
+    run(Args {
+        input: binary_path,
+        output_directory: output_dir.to_string_lossy().into_owned(),
+        diagnostics: false,
+        wrapper_script: true,
+    })
+    .expect("Failed to build wrapped Mach-O decompressor");
+
+    let run_output = Command::new(output_dir.join("decompressor"))
+        .output()
+        .expect("Failed to run wrapped generated decompressor");
+    assert_success("run wrapped generated decompressor", &run_output);
     assert_eq!(run_output.stdout, b"Hello, World!\n");
 }
 

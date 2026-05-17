@@ -33,6 +33,10 @@ pub struct Args {
     /// Enable verbose diagnostics in the generated decompressor
     #[arg(long)]
     pub diagnostics: bool,
+
+    /// Export the decompressor as a self-extracting shell script
+    #[arg(long)]
+    pub wrapper_script: bool,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -75,6 +79,7 @@ pub fn run(args: Args) -> Result<()> {
         &out_path,
         &compressed_macho,
         args.diagnostics,
+        args.wrapper_script,
     )
     .context("Failed to build Mach-O decompressor")?;
 

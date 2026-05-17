@@ -37,10 +37,7 @@ pub struct DecodeChunk {
     pub size: usize,
 }
 
-pub fn compress_binary_with_model(
-    binary: &[u8],
-    model: Box<dyn Model>,
-) -> Result<CompressedMacho> {
+pub fn compress_binary_with_model(binary: &[u8], model: Box<dyn Model>) -> Result<CompressedMacho> {
     let macho = parser::parse(&binary)?;
     validate_supported_macho(&macho)?;
 
