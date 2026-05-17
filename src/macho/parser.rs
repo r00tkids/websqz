@@ -283,11 +283,10 @@ mod tests {
         assert_eq!(segments[3].name, "__LINKEDIT");
 
         let text = &segments[1];
-        assert_eq!(text.sections.len(), 4);
+        assert_eq!(text.sections.len(), 3);
         assert_eq!(text.sections[0].name, "__text");
         assert_eq!(text.sections[1].name, "__stubs");
         assert_eq!(text.sections[2].name, "__cstring");
-        assert_eq!(text.sections[3].name, "__unwind_info");
 
         let uuid = macho
             .load_commands
@@ -303,8 +302,8 @@ mod tests {
         assert_eq!(
             *uuid,
             [
-                0x2E, 0x5D, 0x65, 0x61, 0x6B, 0xC6, 0x39, 0x80, 0x9C, 0x83, 0x54, 0xF3, 0xDE, 0x26,
-                0x50, 0x86
+                0x51, 0x8C, 0xAE, 0x44, 0xEF, 0xD5, 0x37, 0x1C, 0x94, 0x6D, 0xD8, 0xFF, 0x57, 0x92,
+                0x0C, 0xAC
             ],
         );
 

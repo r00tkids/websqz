@@ -66,9 +66,6 @@ static uintptr_t resolve_import(uint32_t index) {
 
     const struct rootsqzImport *import = &rootsqz_imports_start[index];
     const char *name = import->name;
-    if (name[0] == '_') {
-        name++;
-    }
 
     void *symbol = dlsym(RTLD_DEFAULT, name);
     if (!symbol && !import->weak) {

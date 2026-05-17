@@ -116,7 +116,10 @@ pub fn compress_binary_with_model(binary: &[u8], model: Box<dyn Model>) -> Resul
         bail!("No compressible segments found in the binary");
     }
 
-    let (imports, fixups) = parse_chained_fixups(binary, &macho, &macho_segments, min_vm_addr)?;
+    let (mut imports, fixups) = parse_chained_fixups(binary, &macho, &macho_segments, min_vm_addr)?;
+    for import in &mut imports {
+        import.name = strip_macho_symbol_prefix(&import.name).to_owned();
+    }
 
     let mut compressed: Vec<u8> = Vec::new();
     let mut uncompressed = Vec::with_capacity(
@@ -203,4 +206,8 @@ fn entry_offset(
 
 fn align_up(value: u64, align: u64) -> u64 {
     (value + align - 1) & !(align - 1)
+}
+
+fn strip_macho_symbol_prefix(name: &str) -> &str {
+    name.strip_prefix('_').unwrap_or(name)
 }
