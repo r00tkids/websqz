@@ -1,8 +1,17 @@
 #include <dlfcn.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/mman.h>
-#include <unistd.h>
+
+#define ROOTSQZ_PROT_READ 0x01
+#define ROOTSQZ_PROT_WRITE 0x02
+#define ROOTSQZ_MAP_PRIVATE 0x0002
+#define ROOTSQZ_MAP_ANON 0x1000
+#define ROOTSQZ_MAP_FAILED ((void *)-1)
+#define ROOTSQZ_PAGE_SIZE 0x4000
+
+#define ROOTSQZ_SYS_EXIT 1
+#define ROOTSQZ_SYS_MPROTECT 74
+#define ROOTSQZ_SYS_MMAP 197
 
 struct rootsqzSegment {
     uint64_t offset;
@@ -36,15 +45,78 @@ extern const struct rootsqzImport rootsqz_imports_end[];
 extern const struct rootsqzFixup rootsqz_fixups_start[];
 extern const struct rootsqzFixup rootsqz_fixups_end[];
 
-__attribute__((noreturn)) static void fail(void) {
+static uint64_t darwin_syscall3(uint64_t number, uint64_t arg0, uint64_t arg1,
+                                uint64_t arg2, uint64_t *err) {
+    register uint64_t x0 __asm__("x0") = arg0;
+    register uint64_t x1 __asm__("x1") = arg1;
+    register uint64_t x2 __asm__("x2") = arg2;
+    register uint64_t x16 __asm__("x16") = number;
+    uint64_t failed;
+
     __asm__ volatile(
-        "mov x0, #1\n"
-        "mov x16, #1\n"
+        "svc #0x80\n"
+        "cset %w[failed], hs\n"
+        : "+r"(x0), [failed] "=r"(failed)
+        : "r"(x1), "r"(x2), "r"(x16)
+        : "cc", "memory");
+    *err = failed;
+    return x0;
+}
+
+static uint64_t darwin_syscall6(uint64_t number, uint64_t arg0, uint64_t arg1,
+                                uint64_t arg2, uint64_t arg3, uint64_t arg4,
+                                uint64_t arg5, uint64_t *err) {
+    register uint64_t x0 __asm__("x0") = arg0;
+    register uint64_t x1 __asm__("x1") = arg1;
+    register uint64_t x2 __asm__("x2") = arg2;
+    register uint64_t x3 __asm__("x3") = arg3;
+    register uint64_t x4 __asm__("x4") = arg4;
+    register uint64_t x5 __asm__("x5") = arg5;
+    register uint64_t x16 __asm__("x16") = number;
+    uint64_t failed;
+
+    __asm__ volatile(
+        "svc #0x80\n"
+        "cset %w[failed], hs\n"
+        : "+r"(x0), [failed] "=r"(failed)
+        : "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5), "r"(x16)
+        : "cc", "memory");
+    *err = failed;
+    return x0;
+}
+
+static void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
+                      uint64_t offset) {
+    uint64_t err;
+    uint64_t result = darwin_syscall6(ROOTSQZ_SYS_MMAP, (uint64_t)addr,
+                                      (uint64_t)length, (uint64_t)prot,
+                                      (uint64_t)flags, (uint64_t)fd, offset,
+                                      &err);
+    return err ? ROOTSQZ_MAP_FAILED : (void *)result;
+}
+
+static int sys_mprotect(void *addr, size_t length, int prot) {
+    uint64_t err;
+    darwin_syscall3(ROOTSQZ_SYS_MPROTECT, (uint64_t)addr, (uint64_t)length,
+                    (uint64_t)prot, &err);
+    return err ? -1 : 0;
+}
+
+__attribute__((noreturn)) static void sys_exit(int status) {
+    register uint64_t x0 __asm__("x0") = (uint64_t)status;
+    register uint64_t x16 __asm__("x16") = ROOTSQZ_SYS_EXIT;
+
+    __asm__ volatile(
         "svc #0x80\n"
         :
-        :
-        : "x0", "x16", "memory");
-    __builtin_unreachable();
+        : "r"(x0), "r"(x16)
+        : "memory");
+    for (;;) {
+    }
+}
+
+__attribute__((noreturn)) static void fail(void) {
+    sys_exit(1);
 }
 
 static uint64_t page_floor(uint64_t value, uint64_t page_size) {
@@ -55,10 +127,23 @@ static uint64_t page_ceil(uint64_t value, uint64_t page_size) {
     return (value + page_size - 1) & ~(page_size - 1);
 }
 
+static void clear_instruction_cache(uint8_t *start, uint8_t *end) {
+    uintptr_t begin = (uintptr_t)start;
+    uintptr_t finish = (uintptr_t)end;
+
+    __asm__ volatile("dsb ish" : : : "memory");
+
+    for (uintptr_t p = begin & ~(uintptr_t)63; p < finish; p += 64) {
+        __asm__ volatile("ic ivau, %0" : : "r"(p) : "memory");
+    }
+    __asm__ volatile("dsb ish\nisb" : : : "memory");
+}
+
 void *rootsqz_prepare_image(void) {
-    void *image = mmap(NULL, (size_t)rootsqz_image_size, PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (image == MAP_FAILED) {
+    void *image = sys_mmap(NULL, (size_t)rootsqz_image_size,
+                           ROOTSQZ_PROT_READ | ROOTSQZ_PROT_WRITE,
+                           ROOTSQZ_MAP_PRIVATE | ROOTSQZ_MAP_ANON, -1, 0);
+    if (image == ROOTSQZ_MAP_FAILED) {
         fail();
     }
     return image;
@@ -96,7 +181,7 @@ static void apply_fixups(uint8_t *image) {
 }
 
 static void protect_segments(uint8_t *image) {
-    uint64_t page_size = (uint64_t)getpagesize();
+    uint64_t page_size = ROOTSQZ_PAGE_SIZE;
     for (const struct rootsqzSegment *segment = rootsqz_segments_start;
          segment < rootsqz_segments_end;
          segment++) {
@@ -106,7 +191,7 @@ static void protect_segments(uint8_t *image) {
 
         uint64_t start = page_floor(segment->offset, page_size);
         uint64_t end = page_ceil(segment->offset + segment->size, page_size);
-        if (mprotect(image + start, (size_t)(end - start), (int)segment->prot) != 0) {
+        if (sys_mprotect(image + start, (size_t)(end - start), (int)segment->prot) != 0) {
             fail();
         }
     }
@@ -114,7 +199,9 @@ static void protect_segments(uint8_t *image) {
 
 int rootsqz_launch_image(uint8_t *image, int argc, char **argv, char **envp) {
     apply_fixups(image);
-    __builtin___clear_cache((char *)image, (char *)image + rootsqz_image_size);
+    // We have to clear the instruction cache before jumping to the entry point, 
+    // to make sure written code is visible to the instruction fetch unit.
+    clear_instruction_cache(image, image + rootsqz_image_size);
     protect_segments(image);
 
     int (*entry)(int, char **, char **) =
