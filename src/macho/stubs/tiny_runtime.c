@@ -1,16 +1,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define ROOTSQZ_PROT_READ 0x01
-#define ROOTSQZ_PROT_WRITE 0x02
-#define ROOTSQZ_MAP_PRIVATE 0x0002
-#define ROOTSQZ_MAP_ANON 0x1000
-#define ROOTSQZ_MAP_FAILED ((void *)-1)
-#define ROOTSQZ_PAGE_SIZE 0x4000
+#define DARWIN_PROT_READ 0x01
+#define DARWIN_PROT_WRITE 0x02
+#define DARWIN_MAP_PRIVATE 0x0002
+#define DARWIN_MAP_ANON 0x1000
+#define DARWIN_MAP_FAILED ((void *)-1)
+#define DARWIN_PAGE_SIZE 0x4000
 
-#define ROOTSQZ_SYS_EXIT 1
-#define ROOTSQZ_SYS_MPROTECT 74
-#define ROOTSQZ_SYS_MMAP 197
+#define DARWIN_SYS_MPROTECT 74
+#define DARWIN_SYS_MMAP 197
 
 struct rootsqzSegment {
     uint64_t offset;
@@ -87,35 +86,18 @@ static uint64_t darwin_syscall6(uint64_t number, uint64_t arg0, uint64_t arg1,
 static void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
                       uint64_t offset) {
     uint64_t err;
-    uint64_t result = darwin_syscall6(ROOTSQZ_SYS_MMAP, (uint64_t)addr,
+    uint64_t result = darwin_syscall6(DARWIN_SYS_MMAP, (uint64_t)addr,
                                       (uint64_t)length, (uint64_t)prot,
                                       (uint64_t)flags, (uint64_t)fd, offset,
                                       &err);
-    return err ? ROOTSQZ_MAP_FAILED : (void *)result;
+    return err ? DARWIN_MAP_FAILED : (void *)result;
 }
 
 static int sys_mprotect(void *addr, size_t length, int prot) {
     uint64_t err;
-    darwin_syscall3(ROOTSQZ_SYS_MPROTECT, (uint64_t)addr, (uint64_t)length,
+    darwin_syscall3(DARWIN_SYS_MPROTECT, (uint64_t)addr, (uint64_t)length,
                     (uint64_t)prot, &err);
     return err ? -1 : 0;
-}
-
-__attribute__((noreturn)) static void sys_exit(int status) {
-    register uint64_t x0 __asm__("x0") = (uint64_t)status;
-    register uint64_t x16 __asm__("x16") = ROOTSQZ_SYS_EXIT;
-
-    __asm__ volatile(
-        "svc #0x80\n"
-        :
-        : "r"(x0), "r"(x16)
-        : "memory");
-    for (;;) {
-    }
-}
-
-__attribute__((noreturn)) static void fail(void) {
-    sys_exit(1);
 }
 
 static uint64_t page_floor(uint64_t value, uint64_t page_size) {
@@ -140,24 +122,15 @@ static void clear_instruction_cache(uint8_t *start, uint8_t *end) {
 
 void *rootsqz_prepare_image(void) {
     void *image = sys_mmap(NULL, (size_t)rootsqz_image_size,
-                           ROOTSQZ_PROT_READ | ROOTSQZ_PROT_WRITE,
-                           ROOTSQZ_MAP_PRIVATE | ROOTSQZ_MAP_ANON, -1, 0);
-    if (image == ROOTSQZ_MAP_FAILED) {
-        fail();
-    }
+                           DARWIN_PROT_READ | DARWIN_PROT_WRITE,
+                           DARWIN_MAP_PRIVATE | DARWIN_MAP_ANON, -1, 0);
     return image;
 }
 
 static uintptr_t resolve_import(uint32_t index) {
     size_t count = (size_t)(rootsqz_imports_end - rootsqz_imports_start);
-    if (index >= count) {
-        fail();
-    }
 
     const struct rootsqzImport *import = &rootsqz_imports_start[index];
-    if (import->address == 0 && !import->weak) {
-        fail();
-    }
     return import->address;
 }
 
@@ -177,7 +150,7 @@ static void apply_fixups(uint8_t *image) {
 }
 
 static void protect_segments(uint8_t *image) {
-    uint64_t page_size = ROOTSQZ_PAGE_SIZE;
+    uint64_t page_size = DARWIN_PAGE_SIZE;
     for (const struct rootsqzSegment *segment = rootsqz_segments_start;
          segment < rootsqz_segments_end;
          segment++) {
@@ -187,9 +160,7 @@ static void protect_segments(uint8_t *image) {
 
         uint64_t start = page_floor(segment->offset, page_size);
         uint64_t end = page_ceil(segment->offset + segment->size, page_size);
-        if (sys_mprotect(image + start, (size_t)(end - start), (int)segment->prot) != 0) {
-            fail();
-        }
+        sys_mprotect(image + start, (size_t)(end - start), (int)segment->prot);
     }
 }
 
