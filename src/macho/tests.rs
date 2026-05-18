@@ -63,8 +63,8 @@ fn bootstrap_round_trips_compressed_macho_segments() {
     let link_output = Command::new("clang")
         .arg("-arch")
         .arg("arm64")
-        .arg("src/macho/template/bootstrap.s")
-        .arg("src/macho/template/decoder.s")
+        .arg("src/macho/stubs/bootstrap.s")
+        .arg("src/macho/stubs/decoder.s")
         .arg(&payload_path)
         .arg(&harness_path)
         .arg("-o")
@@ -80,7 +80,7 @@ fn bootstrap_round_trips_compressed_macho_segments() {
 }
 
 #[test]
-fn assembly_model_templates_round_trip() {
+fn assembly_model_stubs_round_trip() {
     if !cfg!(all(target_os = "macos", target_arch = "aarch64")) || !command_available("clang") {
         return;
     }
@@ -314,12 +314,12 @@ fn run_assembly_model_round_trip(
     let link_output = Command::new("clang")
         .arg("-arch")
         .arg("arm64")
-        .arg("src/macho/template/bootstrap.s")
-        .arg("src/macho/template/decoder.s")
-        .arg("src/macho/template/model_support.s")
-        .arg("src/macho/template/norder_byte.s")
-        .arg("src/macho/template/word.s")
-        .arg("src/macho/template/ln_mixer.s")
+        .arg("src/macho/stubs/bootstrap.s")
+        .arg("src/macho/stubs/decoder.s")
+        .arg("src/macho/stubs/model_support.s")
+        .arg("src/macho/stubs/norder_byte.s")
+        .arg("src/macho/stubs/word.s")
+        .arg("src/macho/stubs/ln_mixer.s")
         .arg(&payload_path)
         .arg(&model_path)
         .arg(&harness_path)

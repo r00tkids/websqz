@@ -14,14 +14,14 @@ use super::{
     DEFAULT_NORDER_TABLE_POW2,
 };
 
-const BOOTSTRAP_S: &str = include_str!("template/bootstrap.s");
-const DECODER_S: &str = include_str!("template/decoder.s");
-const MODEL_SUPPORT_S: &str = include_str!("template/model_support.s");
-const NORDER_BYTE_S: &str = include_str!("template/norder_byte.s");
-const WORD_S: &str = include_str!("template/word.s");
-const LN_MIXER_S: &str = include_str!("template/ln_mixer.s");
-const TINY_RUNTIME_C: &str = include_str!("template/tiny_runtime.c");
-const DIAGNOSTIC_RUNTIME_C: &str = include_str!("template/diagnostic_runtime.c");
+const BOOTSTRAP_S: &str = include_str!("stubs/bootstrap.s");
+const DECODER_S: &str = include_str!("stubs/decoder.s");
+const MODEL_SUPPORT_S: &str = include_str!("stubs/model_support.s");
+const NORDER_BYTE_S: &str = include_str!("stubs/norder_byte.s");
+const WORD_S: &str = include_str!("stubs/word.s");
+const LN_MIXER_S: &str = include_str!("stubs/ln_mixer.s");
+const TINY_RUNTIME_C: &str = include_str!("stubs/tiny_runtime.c");
+const DIAGNOSTIC_RUNTIME_C: &str = include_str!("stubs/diagnostic_runtime.c");
 
 pub fn build_decompressor(
     output_dir: &Path,
